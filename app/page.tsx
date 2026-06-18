@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useMemo, useEffect } from "react";
 import anime from "animejs";
-import { UploadCloud, Clock, Music, Users, FileJson, Loader2, Calendar, Database, Mail, Download, History, LogOut } from "lucide-react";
+import { UploadCloud, Clock, Music, Users, FileJson, Loader2, Calendar, Database, Mail, Download, History, LogOut, Shuffle, Disc3 } from "lucide-react";
 import { useSpotifyData } from "@/hooks/useSpotifyData";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from 'next/dynamic';
+import { TutorialArea } from "@/components/dashboard/TutorialArea";
+import { RandomAlbumGenerator } from "@/components/dashboard/RandomAlbumGenerator";
+import { KPICards } from "@/components/dashboard/KPICards";
+import { DetailedLists } from "@/components/dashboard/DetailedLists";
 
 const ArtistNetworkMap = dynamic(
   () => import('@/components/ArtistNetworkMap').then(mod => mod.ArtistNetworkMap),
@@ -157,7 +161,6 @@ export default function SpotifyDashboard() {
       fetchLiveStats(liveTimeRange);
     }
   }, [session, archiveStats, liveStats, isLiveLoading, liveTimeRange]);
-
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -469,52 +472,7 @@ export default function SpotifyDashboard() {
         {renderUploadArea()}
 
         {/* Tutorial Area */}
-        {!stats && !isProcessing && (
-          <div className="mt-20 w-full mx-auto">
-            <h2 className="text-2xl font-light text-center text-white mb-10">Comment obtenir ses données Spotify ?</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="relative flex flex-col p-6 border border-white/[0.05] bg-white/[0.01] rounded-3xl">
-                <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center mb-4">
-                  <Database className="w-5 h-5 text-neutral-300" />
-                </div>
-                <h3 className="text-white font-medium mb-2">1. Demander</h3>
-                <p className="text-sm text-neutral-500 font-light leading-relaxed">
-                  Allez dans les <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noreferrer" className="text-neutral-300 hover:text-white underline underline-offset-4 decoration-white/20">paramètres de confidentialité</a> de votre compte Spotify et demandez l'historique de streaming étendu ("Extended streaming history").
-                </p>
-              </div>
-              
-              <div className="relative flex flex-col p-6 border border-white/[0.05] bg-white/[0.01] rounded-3xl">
-                <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center mb-4">
-                  <Clock className="w-5 h-5 text-neutral-300" />
-                </div>
-                <h3 className="text-white font-medium mb-2">2. Patienter</h3>
-                <p className="text-sm text-neutral-500 font-light leading-relaxed">
-                  Spotify a besoin de temps pour rassembler toutes vos données. Cela prend généralement quelques jours (jusqu'à 30 jours au maximum).
-                </p>
-              </div>
-
-              <div className="relative flex flex-col p-6 border border-white/[0.05] bg-white/[0.01] rounded-3xl">
-                <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center mb-4">
-                  <Mail className="w-5 h-5 text-neutral-300" />
-                </div>
-                <h3 className="text-white font-medium mb-2">3. Extraire</h3>
-                <p className="text-sm text-neutral-500 font-light leading-relaxed">
-                  Vous recevrez un e-mail avec un lien une fois l'archive prête. Téléchargez le dossier <span className="font-mono text-neutral-400">.zip</span> et extrayez-le sur votre ordinateur.
-                </p>
-              </div>
-
-              <div className="relative flex flex-col p-6 border border-emerald-500/10 bg-emerald-500/5 rounded-3xl">
-                <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4">
-                  <UploadCloud className="w-5 h-5 text-emerald-400" />
-                </div>
-                <h3 className="text-emerald-50 font-medium mb-2">4. Analyser</h3>
-                <p className="text-sm text-emerald-200/60 font-light leading-relaxed">
-                  Glissez les fichiers commençant par <span className="font-mono text-emerald-300/80">Streaming_History_Audio_</span> directement dans la zone au-dessus !
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {!stats && !isProcessing && <TutorialArea />}
 
         {/* Loading Skeletons */}
         {isProcessing && !stats && (
@@ -534,48 +492,12 @@ export default function SpotifyDashboard() {
         {/* Dashboard KPIs & Charts */}
         {stats && !isProcessing && (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-1000 fill-mode-both">
+            
+            {/* Random Album Generator (Live Only) */}
+            {liveStats && !archiveStats && <RandomAlbumGenerator />}
+
             {/* Matrices KPI */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card className="kpi-card opacity-0 bg-transparent border-white/[0.08] text-neutral-200 rounded-3xl shadow-none">
-                <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                  <CardTitle className="text-xs tracking-widest uppercase font-medium text-neutral-500">Temps d'écoute</CardTitle>
-                  <Clock className="w-4 h-4 text-neutral-400 stroke-[1.5]" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-4xl font-light tracking-tight text-white">{formatHours(stats.totalMsPlayed)}<span className="text-lg text-neutral-600 ml-1">h</span></div>
-                </CardContent>
-              </Card>
-
-              <Card className="kpi-card opacity-0 bg-transparent border-white/[0.08] text-neutral-200 rounded-3xl shadow-none">
-                <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                  <CardTitle className="text-xs tracking-widest uppercase font-medium text-neutral-500">Titres Uniques</CardTitle>
-                  <Music className="w-4 h-4 text-neutral-400 stroke-[1.5]" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-4xl font-light tracking-tight text-white">{stats.uniqueTracks.toLocaleString('fr-FR')}</div>
-                </CardContent>
-              </Card>
-
-              <Card className="kpi-card opacity-0 bg-transparent border-white/[0.08] text-neutral-200 rounded-3xl shadow-none">
-                <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                  <CardTitle className="text-xs tracking-widest uppercase font-medium text-neutral-500">Artistes Uniques</CardTitle>
-                  <Users className="w-4 h-4 text-neutral-400 stroke-[1.5]" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-4xl font-light tracking-tight text-white">{stats.uniqueArtists.toLocaleString('fr-FR')}</div>
-                </CardContent>
-              </Card>
-
-              <Card className="kpi-card opacity-0 bg-transparent border-white/[0.08] text-neutral-200 rounded-3xl shadow-none">
-                <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                  <CardTitle className="text-xs tracking-widest uppercase font-medium text-neutral-500">Fichiers Analysés</CardTitle>
-                  <FileJson className="w-4 h-4 text-neutral-400 stroke-[1.5]" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-4xl font-light tracking-tight text-white">{stats.totalFiles}</div>
-                </CardContent>
-              </Card>
-            </div>
+            <KPICards stats={stats} />
 
             {/* Monthly Evolution Chart */}
             {!stats?.isLive && (
@@ -714,94 +636,7 @@ export default function SpotifyDashboard() {
             </div>
 
             {/* Listes détaillées Top 15 (existantes) */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <Card className="chart-card opacity-0 flex flex-col overflow-hidden bg-transparent border-white/[0.08] rounded-3xl shadow-none">
-                <CardHeader className="border-b border-white/[0.05] bg-white/[0.01] pt-6 px-8">
-                  <CardTitle className="text-xl font-light text-white">Détail Artistes</CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 p-0">
-                  <ScrollArea className="h-[400px]">
-                    <ul className="divide-y divide-white/[0.05]">
-                      {stats.topArtists.length > 0 ? (
-                        stats.topArtists.map((artist: any, index: number) => (
-                          <li key={artist.name} className="list-item-anim opacity-0 flex items-center justify-between p-5 transition-colors hover:bg-white/[0.02] group">
-                            <div className="flex items-center space-x-5">
-                              <div className="relative">
-                                {images.artists[artist.name] ? (
-                                  <img src={images.artists[artist.name]} alt={artist.name} className="w-12 h-12 rounded-full object-cover bg-neutral-900 border border-white/10 group-hover:border-white/30 transition-colors" />
-                                ) : (
-                                  <span className="flex items-center justify-center w-12 h-12 text-sm font-light rounded-full bg-white/[0.03] text-neutral-400 border border-white/[0.05]">
-                                    {index + 1}
-                                  </span>
-                                )}
-                                {images.artists[artist.name] && (
-                                  <span className="absolute -top-1 -left-1 flex items-center justify-center w-5 h-5 text-[10px] font-medium rounded-full bg-black border border-white/20 text-white">
-                                    {index + 1}
-                                  </span>
-                                )}
-                              </div>
-                              <span className="font-light text-neutral-200 group-hover:text-white transition-colors">{artist.name}</span>
-                            </div>
-                            <span className="text-sm font-light text-neutral-500 tabular-nums">
-                              {stats?.isLive ? `Top ${index + 1}` : `${formatHours(artist.msPlayed)} h`}
-                            </span>
-                          </li>
-                        ))
-                      ) : (
-                        <div className="flex items-center justify-center h-full p-8 text-neutral-600 font-light">
-                          Aucune donnée
-                        </div>
-                      )}
-                    </ul>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-
-              <Card className="chart-card opacity-0 flex flex-col overflow-hidden bg-transparent border-white/[0.08] rounded-3xl shadow-none">
-                <CardHeader className="border-b border-white/[0.05] bg-white/[0.01] pt-6 px-8">
-                  <CardTitle className="text-xl font-light text-white">Détail Titres</CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 p-0">
-                  <ScrollArea className="h-[400px]">
-                    <ul className="divide-y divide-white/[0.05]">
-                      {stats.topTracks.length > 0 ? (
-                        stats.topTracks.map((track: any, index: number) => (
-                          <li key={`${track.name}-${track.artist}`} className="list-item-anim opacity-0 flex items-center justify-between p-5 transition-colors hover:bg-white/[0.02] group">
-                            <div className="flex items-center space-x-5">
-                              <div className="relative">
-                                {images.tracks[track.uri || `${track.name}-${track.artist}`] ? (
-                                  <img src={images.tracks[track.uri || `${track.name}-${track.artist}`]} alt={track.name} className="w-12 h-12 rounded-lg object-cover bg-neutral-900 border border-white/10 group-hover:border-white/30 transition-colors" />
-                                ) : (
-                                  <span className="flex items-center justify-center w-12 h-12 text-sm font-light rounded-lg bg-white/[0.03] text-neutral-400 border border-white/[0.05]">
-                                    {index + 1}
-                                  </span>
-                                )}
-                                {images.tracks[track.uri || `${track.name}-${track.artist}`] && (
-                                  <span className="absolute -top-1 -left-1 flex items-center justify-center w-5 h-5 text-[10px] font-medium rounded-full bg-black border border-white/20 text-white shadow-sm">
-                                    {index + 1}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-col max-w-[200px] sm:max-w-[300px]">
-                                <span className="font-light text-neutral-200 truncate group-hover:text-white transition-colors">{track.name}</span>
-                                <span className="text-xs font-light text-neutral-500 truncate">{track.artist}</span>
-                              </div>
-                            </div>
-                            <span className="text-sm font-light text-neutral-500 tabular-nums">
-                              {stats?.isLive ? `Top ${index + 1}` : `${track.playCount.toLocaleString('fr-FR')} x`}
-                            </span>
-                          </li>
-                        ))
-                      ) : (
-                        <div className="flex items-center justify-center h-full p-8 text-neutral-600 font-light">
-                          Aucune donnée
-                        </div>
-                      )}
-                    </ul>
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </div>
+            <DetailedLists stats={stats} images={images} />
 
             {/* Network Map */}
             {stats.networkData && stats.networkData.nodes.length > 0 && (
