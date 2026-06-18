@@ -1,17 +1,24 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { UploadCloud, Clock, Music, Users, FileJson, Loader2 } from "lucide-react";
+import { UploadCloud, Clock, Music, Users, FileJson, Loader2, Calendar } from "lucide-react";
 import { useSpotifyData } from "@/hooks/useSpotifyData";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 export default function SpotifyDashboard() {
-  const { processFiles, stats, isProcessing, error } = useSpotifyData();
+  const { processFiles, stats, isProcessing, error, availableYears, selectedYear, setSelectedYear } = useSpotifyData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -98,13 +105,37 @@ export default function SpotifyDashboard() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-green-500/30">
       <main className="container max-w-6xl px-6 py-12 mx-auto space-y-8">
-        <header className="space-y-2">
-          <h1 className="text-4xl font-extrabold tracking-tight text-white lg:text-5xl">
-            Spotify <span className="text-green-500">Extended</span> Stats
-          </h1>
-          <p className="text-lg text-slate-400">
-            Analysez en profondeur votre historique d'écoute à partir des données étendues de Spotify.
-          </p>
+        <header className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+          <div className="space-y-2">
+            <h1 className="text-4xl font-extrabold tracking-tight text-white lg:text-5xl">
+              Spotify <span className="text-green-500">Extended</span> Stats
+            </h1>
+            <p className="text-lg text-slate-400">
+              Analysez en profondeur votre historique d'écoute à partir des données étendues de Spotify.
+            </p>
+          </div>
+          
+          {stats && availableYears.length > 0 && (
+            <div className="flex items-center space-x-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800 backdrop-blur-sm">
+              <Calendar className="w-5 h-5 text-slate-400" />
+              <Select
+                value={selectedYear.toString()}
+                onValueChange={(val) => setSelectedYear(val === "all" ? "all" : parseInt(val as string, 10))}
+              >
+                <SelectTrigger className="w-[180px] bg-slate-950 border-slate-700 text-slate-200">
+                  <SelectValue placeholder="Sélectionner une année" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
+                  <SelectItem value="all">Toutes les années</SelectItem>
+                  {availableYears.map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </header>
 
         {error && (
@@ -131,10 +162,10 @@ export default function SpotifyDashboard() {
           </div>
         )}
 
-        {/* Dashboard */}
+        {/* Dashboard KPIs */}
         {stats && !isProcessing && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            {/* KPIs */}
+            {/* Matrices KPI */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Card className="bg-slate-900 border-slate-800 text-slate-200">
                 <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
@@ -177,60 +208,86 @@ export default function SpotifyDashboard() {
               </Card>
             </div>
 
-            {/* Ranking Matrices */}
+            {/* Classements détaillés */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {/* Top Artists */}
+              {/* Top Artistes */}
               <Card className="flex flex-col overflow-hidden bg-slate-900 border-slate-800">
-                <CardHeader className="border-b border-slate-800/50 bg-slate-900/50">
-                  <CardTitle className="text-xl text-slate-100">Top 15 Artistes</CardTitle>
-                  <CardDescription className="text-slate-400">Classement par volume horaire d'écoute</CardDescription>
+                <CardHeader className="border-b border-slate-800/50 bg-slate-900/50 flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl text-slate-100">Top 15 Artistes</CardTitle>
+                    <CardDescription className="text-slate-400">Classement par volume horaire d'écoute</CardDescription>
+                  </div>
+                  {selectedYear !== "all" && (
+                    <Badge variant="outline" className="text-green-500 border-green-500/30 bg-green-500/10">
+                      {selectedYear}
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent className="flex-1 p-0">
                   <ScrollArea className="h-[450px]">
                     <ul className="divide-y divide-slate-800/50">
-                      {stats.topArtists.map((artist, index) => (
-                        <li key={artist.name} className="flex items-center justify-between p-4 transition-colors hover:bg-slate-800/50">
-                          <div className="flex items-center space-x-4">
-                            <span className="flex items-center justify-center w-8 h-8 text-sm font-bold rounded-full bg-slate-800 text-slate-400">
-                              {index + 1}
-                            </span>
-                            <span className="font-medium text-slate-200">{artist.name}</span>
-                          </div>
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-400 hover:bg-green-500/20">
-                            {formatHours(artist.msPlayed)} h
-                          </Badge>
-                        </li>
-                      ))}
+                      {stats.topArtists.length > 0 ? (
+                        stats.topArtists.map((artist, index) => (
+                          <li key={artist.name} className="flex items-center justify-between p-4 transition-colors hover:bg-slate-800/50">
+                            <div className="flex items-center space-x-4">
+                              <span className="flex items-center justify-center w-8 h-8 text-sm font-bold rounded-full bg-slate-800 text-slate-400">
+                                {index + 1}
+                              </span>
+                              <span className="font-medium text-slate-200">{artist.name}</span>
+                            </div>
+                            <Badge variant="secondary" className="bg-green-500/10 text-green-400 hover:bg-green-500/20">
+                              {formatHours(artist.msPlayed)} h
+                            </Badge>
+                          </li>
+                        ))
+                      ) : (
+                        <div className="flex items-center justify-center h-full p-8 text-slate-500">
+                          Aucune donnée pour cette année
+                        </div>
+                      )}
                     </ul>
                   </ScrollArea>
                 </CardContent>
               </Card>
 
-              {/* Top Tracks */}
+              {/* Top Titres */}
               <Card className="flex flex-col overflow-hidden bg-slate-900 border-slate-800">
-                <CardHeader className="border-b border-slate-800/50 bg-slate-900/50">
-                  <CardTitle className="text-xl text-slate-100">Top 15 Titres</CardTitle>
-                  <CardDescription className="text-slate-400">Classement par nombre de lectures</CardDescription>
+                <CardHeader className="border-b border-slate-800/50 bg-slate-900/50 flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl text-slate-100">Top 15 Titres</CardTitle>
+                    <CardDescription className="text-slate-400">Classement par nombre de lectures</CardDescription>
+                  </div>
+                  {selectedYear !== "all" && (
+                    <Badge variant="outline" className="text-green-500 border-green-500/30 bg-green-500/10">
+                      {selectedYear}
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent className="flex-1 p-0">
                   <ScrollArea className="h-[450px]">
                     <ul className="divide-y divide-slate-800/50">
-                      {stats.topTracks.map((track, index) => (
-                        <li key={`${track.name}-${track.artist}`} className="flex items-center justify-between p-4 transition-colors hover:bg-slate-800/50">
-                          <div className="flex items-center space-x-4">
-                            <span className="flex items-center justify-center w-8 h-8 text-sm font-bold rounded-full bg-slate-800 text-slate-400">
-                              {index + 1}
-                            </span>
-                            <div className="flex flex-col max-w-[200px] sm:max-w-[300px]">
-                              <span className="font-medium text-slate-200 truncate">{track.name}</span>
-                              <span className="text-sm text-slate-400 truncate">{track.artist}</span>
+                      {stats.topTracks.length > 0 ? (
+                        stats.topTracks.map((track, index) => (
+                          <li key={`${track.name}-${track.artist}`} className="flex items-center justify-between p-4 transition-colors hover:bg-slate-800/50">
+                            <div className="flex items-center space-x-4">
+                              <span className="flex items-center justify-center w-8 h-8 text-sm font-bold rounded-full bg-slate-800 text-slate-400">
+                                {index + 1}
+                              </span>
+                              <div className="flex flex-col max-w-[200px] sm:max-w-[300px]">
+                                <span className="font-medium text-slate-200 truncate">{track.name}</span>
+                                <span className="text-sm text-slate-400 truncate">{track.artist}</span>
+                              </div>
                             </div>
-                          </div>
-                          <Badge variant="secondary" className="bg-slate-800 text-slate-300">
-                            {track.playCount.toLocaleString('fr-FR')} écoutes
-                          </Badge>
-                        </li>
-                      ))}
+                            <Badge variant="secondary" className="bg-slate-800 text-slate-300">
+                              {track.playCount.toLocaleString('fr-FR')} écoutes
+                            </Badge>
+                          </li>
+                        ))
+                      ) : (
+                        <div className="flex items-center justify-center h-full p-8 text-slate-500">
+                          Aucune donnée pour cette année
+                        </div>
+                      )}
                     </ul>
                   </ScrollArea>
                 </CardContent>
