@@ -16,11 +16,11 @@ import {
   ChartLegend,
   ChartLegendContent,
 } from "@/components/ui/chart";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
 
 export default function SpotifyDashboard() {
-  const { processFiles, stats, isProcessing, error, availableYears, selectedYears, toggleYear, selectAllYears } = useSpotifyData();
+  const { processFiles, stats, isProcessing, error, availableYears, selectedYears, toggleYear, selectAllYears, clearAllYears } = useSpotifyData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -66,6 +66,20 @@ export default function SpotifyDashboard() {
     });
     return config;
   }, [availableYears]);
+
+  const top5TracksChartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    const colors = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6"];
+    if (stats?.topTracks) {
+      stats.topTracks.slice(0, 5).forEach((t, i) => {
+        config[`track_${i}`] = {
+          label: t.name,
+          color: colors[i % colors.length],
+        };
+      });
+    }
+    return config;
+  }, [stats]);
 
   const topArtistsChartConfig = {
     msPlayed: {
@@ -180,6 +194,16 @@ export default function SpotifyDashboard() {
                   onClick={selectAllYears}
                 >
                   Toutes
+                </Badge>
+                <Badge 
+                  variant={selectedYears.length === 0 ? "default" : "outline"}
+                  className={cn(
+                    "cursor-pointer transition-all", 
+                    selectedYears.length === 0 ? "bg-red-500/20 text-red-400 border-red-500/50 hover:bg-red-500/30" : "text-slate-400 border-slate-700 hover:border-slate-500 hover:bg-slate-800"
+                  )}
+                  onClick={clearAllYears}
+                >
+                  Aucune
                 </Badge>
                 {availableYears.map(year => {
                   const isSelected = selectedYears.includes(year);
@@ -302,6 +326,47 @@ export default function SpotifyDashboard() {
                           )
                         ))}
                       </BarChart>
+                    </ChartContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-500">
+                      Sélectionnez au moins une année pour afficher le graphique
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Top 5 Tracks Evolution Chart */}
+            <Card className="bg-slate-900 border-slate-800 text-slate-200">
+              <CardHeader>
+                <CardTitle>Évolution des 5 titres les plus écoutés</CardTitle>
+                <CardDescription className="text-slate-400">Nombre de lectures par mois pour le Top 5 des titres</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px] w-full">
+                  {selectedYears.length > 0 && stats.monthlyTopTracksStats.length > 0 ? (
+                    <ChartContainer config={top5TracksChartConfig} className="h-[400px] w-full">
+                      <LineChart data={stats.monthlyTopTracksStats} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} stroke="#94a3b8" />
+                        <YAxis tickLine={false} axisLine={false} tickMargin={8} stroke="#94a3b8" />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <ChartLegend content={<ChartLegendContent />} />
+                        {stats.topTracks.slice(0, 5).map((t, i) => {
+                          const safeKey = `track_${i}`;
+                          return (
+                            <Line
+                              key={safeKey}
+                              type="monotone"
+                              dataKey={safeKey}
+                              stroke={`var(--color-${safeKey})`}
+                              strokeWidth={3}
+                              dot={{ fill: "var(--color-bg)", strokeWidth: 2 }}
+                              activeDot={{ r: 6 }}
+                            />
+                          );
+                        })}
+                      </LineChart>
                     </ChartContainer>
                   ) : (
                     <div className="flex items-center justify-center h-full text-slate-500">

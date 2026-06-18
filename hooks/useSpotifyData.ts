@@ -47,6 +47,7 @@ export interface SpotifyStats {
   topArtists: ArtistStats[];
   topTracks: TrackStats[];
   monthlyStats: MonthlyStats[];
+  monthlyTopTracksStats: any[];
   totalFiles: number;
 }
 
@@ -120,8 +121,10 @@ export const useSpotifyData = () => {
     
     // Structure pour les stats mensuelles
     const monthYearMap: Record<number, Record<string, number>> = {};
+    const monthTrackCountMap: Record<number, Record<string, number>> = {};
     for (let i = 0; i < 12; i++) {
       monthYearMap[i] = {};
+      monthTrackCountMap[i] = {};
       availableYears.forEach(y => {
         monthYearMap[i][y.toString()] = 0;
       });
@@ -158,6 +161,8 @@ export const useSpotifyData = () => {
       uniqueArtists.add(artistName);
       trackCountMap.set(trackKey, (trackCountMap.get(trackKey) || 0) + 1);
       uniqueTracks.add(trackKey);
+      
+      monthTrackCountMap[entryMonth][trackKey] = (monthTrackCountMap[entryMonth][trackKey] || 0) + 1;
     }
 
     const topArtists = Array.from(artistMsMap.entries())
@@ -183,6 +188,16 @@ export const useSpotifyData = () => {
       return data;
     });
 
+    const top5Tracks = topTracks.slice(0, 5);
+    const monthlyTopTracksStats = MONTH_NAMES.map((month, index) => {
+      const data: any = { month };
+      top5Tracks.forEach((t, i) => {
+        const trackKey = `${t.name}::${t.artist}`;
+        data[`track_${i}`] = monthTrackCountMap[index][trackKey] || 0;
+      });
+      return data;
+    });
+
     return {
       totalMsPlayed,
       uniqueArtists: uniqueArtists.size,
@@ -190,6 +205,7 @@ export const useSpotifyData = () => {
       topArtists,
       topTracks,
       monthlyStats,
+      monthlyTopTracksStats,
       totalFiles,
     };
   }, [rawEntries, selectedYears, totalFiles, availableYears]);
@@ -206,6 +222,10 @@ export const useSpotifyData = () => {
     setSelectedYears(availableYears);
   };
 
+  const clearAllYears = () => {
+    setSelectedYears([]);
+  };
+
   return { 
     processFiles, 
     stats, 
@@ -214,6 +234,7 @@ export const useSpotifyData = () => {
     availableYears, 
     selectedYears, 
     toggleYear, 
-    selectAllYears 
+    selectAllYears,
+    clearAllYears
   };
 };
