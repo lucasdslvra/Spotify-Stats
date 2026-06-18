@@ -2,8 +2,9 @@
 
 import React, { useRef, useState, useMemo, useEffect } from "react";
 import anime from "animejs";
-import { UploadCloud, Clock, Music, Users, FileJson, Loader2, Calendar, Database, Mail, Download, History } from "lucide-react";
+import { UploadCloud, Clock, Music, Users, FileJson, Loader2, Calendar, Database, Mail, Download, History, LogOut } from "lucide-react";
 import { useSpotifyData } from "@/hooks/useSpotifyData";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -58,9 +59,63 @@ const CustomYAxisTick = ({ x, y, payload, data, images, isTrack }: any) => {
 };
 
 export default function SpotifyDashboard() {
-  const { processFiles, stats, isProcessing, error, availableYears, selectedYears, toggleYear, selectAllYears, clearAllYears, images } = useSpotifyData();
+  const { processFiles, stats: archiveStats, isProcessing, error, availableYears, selectedYears, toggleYear, selectAllYears, clearAllYears, images: archiveImages } = useSpotifyData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const { data: session } = useSession();
+  const [liveStats, setLiveStats] = useState<any>(null);
+  const [liveImages, setLiveImages] = useState<{ artists: Record<string, string>; tracks: Record<string, string> }>({ artists: {}, tracks: {} });
+  const [isLiveLoading, setIsLiveLoading] = useState(false);
+  const [liveTimeRange, setLiveTimeRange] = useState("medium_term");
+  
+  const stats = archiveStats || liveStats;
+  const images = {
+    artists: { ...archiveImages.artists, ...liveImages.artists },
+    tracks: { ...archiveImages.tracks, ...liveImages.tracks }
+  };
+
+  const fetchLiveStats = async (timeRange: string) => {
+    setIsLiveLoading(true);
+    try {
+      const res = await fetch(`/api/spotify/live?time_range=${timeRange}`);
+      if (res.ok) {
+        const data = await res.json();
+        const newLiveImages = { artists: {} as Record<string, string>, tracks: {} as Record<string, string> };
+        const topArtists = data.artists.map((a: any, i: number) => {
+          if (a.images?.[0]?.url) newLiveImages.artists[a.name] = a.images[0].url;
+          return { name: a.name, msPlayed: (50 - i) * 3600000 };
+        });
+        const topTracks = data.tracks.map((t: any, i: number) => {
+          const artistName = t.artists[0].name;
+          const key = t.uri || `${t.name}-${artistName}`;
+          if (t.album?.images?.[0]?.url) newLiveImages.tracks[key] = t.album.images[0].url;
+          return { name: t.name, artist: artistName, playCount: 50 - i, uri: t.uri };
+        });
+        setLiveImages(newLiveImages);
+        setLiveStats({
+          totalMsPlayed: 0,
+          uniqueArtists: data.artists.length,
+          uniqueTracks: data.tracks.length,
+          topArtists,
+          topTracks,
+          monthlyStats: [],
+          monthlyTopTracksStats: [],
+          networkData: { nodes: [], links: [] }
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLiveLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if ((session as any)?.accessToken && !archiveStats && !liveStats && !isLiveLoading) {
+      fetchLiveStats(liveTimeRange);
+    }
+  }, [session, archiveStats, liveStats, isLiveLoading, liveTimeRange]);
+
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -146,7 +201,7 @@ export default function SpotifyDashboard() {
     // Palette distincte pour les lignes de l'évolution des musiques
     const colors = ["#10b981", "#8b5cf6", "#0ea5e9", "#f43f5e", "#f59e0b"];
     if (stats?.topTracks) {
-      stats.topTracks.slice(0, 5).forEach((t, i) => {
+      stats.topTracks.slice(0, 5).forEach((t: any, i: number) => {
         config[`track_${i}`] = {
           label: t.name,
           color: colors[i % colors.length],
@@ -172,7 +227,7 @@ export default function SpotifyDashboard() {
 
   const top10ArtistsChartData = useMemo(() => {
     if (!stats) return [];
-    return stats.topArtists.slice(0, 10).map(a => ({
+    return stats.topArtists.slice(0, 10).map((a: any) => ({
       name: a.name.length > 15 ? a.name.substring(0, 15) + "..." : a.name,
       fullName: a.name,
       msPlayed: Number((a.msPlayed / (1000 * 60 * 60)).toFixed(2))
@@ -181,7 +236,7 @@ export default function SpotifyDashboard() {
 
   const top10TracksChartData = useMemo(() => {
     if (!stats) return [];
-    return stats.topTracks.slice(0, 10).map(t => ({
+    return stats.topTracks.slice(0, 10).map((t: any) => ({
       name: t.name.length > 15 ? t.name.substring(0, 15) + "..." : t.name,
       fullName: `${t.name} - ${t.artist}`,
       playCount: t.playCount,
@@ -191,16 +246,17 @@ export default function SpotifyDashboard() {
 
   const isAllYearsSelected = availableYears.length > 0 && selectedYears.length === availableYears.length;
 
-  const renderUploadArea = () => (
+  const renderUploadArea = () => {
+    if (liveStats && !archiveStats) return null; // Masquer la zone si on est en mode "Live" (Spotify) uniquement
+    return (
     <div
       className={cn(
-        "relative flex flex-col items-center justify-center p-16 transition-all duration-500 ease-out border rounded-2xl cursor-pointer group overflow-hidden",
+        "relative flex flex-col items-center justify-center p-16 transition-all duration-500 ease-out border rounded-2xl group overflow-hidden",
         isDragOver
           ? "border-white bg-white/[0.02] scale-[1.01]"
           : "border-white/[0.08] hover:border-white/20 hover:bg-white/[0.01]",
         stats ? "py-10 opacity-70 hover:opacity-100" : "min-h-[45vh]"
       )}
-      onClick={() => fileInputRef.current?.click()}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -214,10 +270,12 @@ export default function SpotifyDashboard() {
         ref={fileInputRef}
         onChange={handleFileChange}
       />
-      {isProcessing ? (
+      {isProcessing || isLiveLoading ? (
         <div className="flex flex-col items-center space-y-6 z-10">
           <Loader2 className="w-10 h-10 text-white animate-spin stroke-[1.5]" />
-          <p className="text-sm font-light tracking-wide text-neutral-400">Traitement des données en cours...</p>
+          <p className="text-sm font-light tracking-wide text-neutral-400">
+            {isLiveLoading ? "Connexion à Spotify en cours..." : "Traitement des données en cours..."}
+          </p>
         </div>
       ) : (
         <div className="flex flex-col items-center space-y-6 text-center z-10">
@@ -233,14 +291,25 @@ export default function SpotifyDashboard() {
             )}
           </div>
           {!stats && (
-            <Button variant="outline" className="mt-8 rounded-full px-8 py-6 font-light border-white/10 text-white bg-transparent hover:bg-white hover:text-black transition-colors duration-300">
+            <div className="mt-8 flex flex-col sm:flex-row items-center gap-4">
+              <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="rounded-full px-8 py-6 font-light border-white/10 text-white bg-transparent hover:bg-white hover:text-black transition-colors duration-300">
+                Importer vos archives .json
+              </Button>
+              <div className="text-neutral-600 font-light text-sm">ou</div>
+              <Button onClick={() => signIn("spotify")} className="rounded-full px-8 py-6 font-light bg-[#1DB954] hover:bg-[#1ed760] text-black transition-colors duration-300 border-none">
+                Se connecter à Spotify (En direct)
+              </Button>
+            </div>
+          )}
+          {stats && (
+            <Button onClick={() => fileInputRef.current?.click()} variant="outline" className="mt-8 rounded-full px-8 py-4 font-light border-white/10 text-white bg-transparent hover:bg-white hover:text-black transition-colors duration-300">
               Parcourir les fichiers
             </Button>
           )}
         </div>
       )}
     </div>
-  );
+  )};
 
   return (
     <div className="min-h-screen bg-[#050505] text-neutral-200 selection:bg-white/20 pb-24 font-sans selection:text-white">
@@ -257,11 +326,11 @@ export default function SpotifyDashboard() {
               Statistiques Spotify
             </h1>
             <p className="text-lg font-light text-neutral-500 max-w-2xl">
-              Analyse détaillée et minimaliste de votre historique d'écoute étendu.
+              Analyse détaillée et minimaliste de votre historique d'écoute {liveStats ? "en direct." : "étendu."}
             </p>
           </div>
           
-          {stats && availableYears.length > 0 && (
+          {archiveStats && availableYears.length > 0 && (
             <div className="flex flex-col gap-3 min-w-[280px]">
               <div className="flex items-center gap-2 text-neutral-500">
                 <Calendar className="w-4 h-4 stroke-[1.5]" />
@@ -307,6 +376,42 @@ export default function SpotifyDashboard() {
                     </Badge>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {liveStats && !archiveStats && (
+            <div className="flex flex-col gap-3 min-w-[280px]">
+              <div className="flex items-center justify-between text-neutral-500">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 stroke-[1.5]" />
+                  <span className="text-xs tracking-widest uppercase font-medium">Période Spotify</span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => { signOut(); setLiveStats(null); }} className="h-6 px-2 text-xs text-neutral-400 hover:text-white">
+                  <LogOut className="w-3 h-3 mr-1" /> Déconnexion
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: "short_term", label: "4 Semaines" },
+                  { value: "medium_term", label: "6 Mois" },
+                  { value: "long_term", label: "1 An" }
+                ].map(tr => (
+                  <Badge 
+                    key={tr.value}
+                    variant="outline"
+                    className={cn(
+                      "cursor-pointer transition-all duration-300 font-light rounded-full px-4 py-1", 
+                      liveTimeRange === tr.value ? "bg-white text-black border-white" : "text-neutral-400 border-white/10 hover:border-white/30 hover:text-white bg-transparent"
+                    )}
+                    onClick={() => {
+                      setLiveTimeRange(tr.value);
+                      fetchLiveStats(tr.value);
+                    }}
+                  >
+                    {tr.label}
+                  </Badge>
+                ))}
               </div>
             </div>
           )}
@@ -486,7 +591,7 @@ export default function SpotifyDashboard() {
                         <YAxis tickLine={false} axisLine={false} tickMargin={12} stroke="#737373" fontSize={12} />
                         <ChartTooltip content={<ChartTooltipContent />} cursor={{stroke: '#ffffff15', strokeWidth: 2}} />
                         <ChartLegend content={<ChartLegendContent />} />
-                        {stats.topTracks.slice(0, 5).map((t, i) => {
+                        {stats.topTracks.slice(0, 5).map((t: any, i: number) => {
                           const safeKey = `track_${i}`;
                           return (
                             <Line
@@ -572,7 +677,7 @@ export default function SpotifyDashboard() {
                   <ScrollArea className="h-[400px]">
                     <ul className="divide-y divide-white/[0.05]">
                       {stats.topArtists.length > 0 ? (
-                        stats.topArtists.map((artist, index) => (
+                        stats.topArtists.map((artist: any, index: number) => (
                           <li key={artist.name} className="list-item-anim opacity-0 flex items-center justify-between p-5 transition-colors hover:bg-white/[0.02] group">
                             <div className="flex items-center space-x-5">
                               <div className="relative">
@@ -614,7 +719,7 @@ export default function SpotifyDashboard() {
                   <ScrollArea className="h-[400px]">
                     <ul className="divide-y divide-white/[0.05]">
                       {stats.topTracks.length > 0 ? (
-                        stats.topTracks.map((track, index) => (
+                        stats.topTracks.map((track: any, index: number) => (
                           <li key={`${track.name}-${track.artist}`} className="list-item-anim opacity-0 flex items-center justify-between p-5 transition-colors hover:bg-white/[0.02] group">
                             <div className="flex items-center space-x-5">
                               <div className="relative">
