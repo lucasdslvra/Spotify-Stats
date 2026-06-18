@@ -273,14 +273,14 @@ export const useSpotifyData = () => {
         .filter(name => !requestedImages.current.has(name));
         
       const missingTracks = stats.topTracks
-        .filter(t => t.uri && !requestedImages.current.has(t.uri))
-        .map(t => t.uri as string);
+        .map(t => ({ uri: t.uri, name: t.name, artist: t.artist, key: t.uri || `${t.name}-${t.artist}` }))
+        .filter(t => !requestedImages.current.has(t.key));
 
       if (missingArtists.length === 0 && missingTracks.length === 0) return;
 
       // Marquer comme demandé immédiatement
       missingArtists.forEach(a => requestedImages.current.add(a));
-      missingTracks.forEach(t => requestedImages.current.add(t));
+      missingTracks.forEach(t => requestedImages.current.add(t.key));
 
       try {
         const res = await fetch('/api/spotify/images', {

@@ -20,6 +20,37 @@ import {
 import { Bar, BarChart, Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
 
+const CustomYAxisTick = ({ x, y, payload, data, images, isTrack }: any) => {
+  const item = data[payload.index];
+  let imageUrl = null;
+  if (item) {
+    if (isTrack) {
+      imageUrl = images.tracks[item.uri || `${item.name}-${item.artist}`];
+    } else if (!isTrack && item.fullName) {
+      imageUrl = images.artists[item.fullName];
+    }
+  }
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <foreignObject x={-140} y={-14} width={140} height={28}>
+        <div className="flex items-center justify-end w-full h-full pr-2 space-x-2">
+          {imageUrl && (
+            <img 
+              src={imageUrl} 
+              alt="" 
+              className={cn("w-6 h-6 object-cover shadow-sm bg-neutral-900 border border-white/5", isTrack ? "rounded-md" : "rounded-full")} 
+            />
+          )}
+          <span className="text-xs text-neutral-400 font-light truncate max-w-[80px]" title={item?.fullName}>
+            {payload.value}
+          </span>
+        </div>
+      </foreignObject>
+    </g>
+  );
+};
+
 export default function SpotifyDashboard() {
   const { processFiles, stats, isProcessing, error, availableYears, selectedYears, toggleYear, selectAllYears, clearAllYears, images } = useSpotifyData();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -147,7 +178,8 @@ export default function SpotifyDashboard() {
     return stats.topTracks.slice(0, 10).map(t => ({
       name: t.name.length > 15 ? t.name.substring(0, 15) + "..." : t.name,
       fullName: `${t.name} - ${t.artist}`,
-      playCount: t.playCount
+      playCount: t.playCount,
+      uri: t.uri
     }));
   }, [stats]);
 
@@ -439,7 +471,7 @@ export default function SpotifyDashboard() {
                         <BarChart data={top10ArtistsChartData} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                           <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#ffffff15" />
                           <XAxis type="number" hide />
-                          <YAxis dataKey="name" type="category" width={100} tickLine={false} axisLine={false} stroke="#a3a3a3" fontSize={12} />
+                          <YAxis dataKey="name" type="category" width={140} tickLine={false} axisLine={false} stroke="#a3a3a3" fontSize={12} tick={(props) => <CustomYAxisTick {...props} data={top10ArtistsChartData} images={images} isTrack={false} />} />
                           <ChartTooltip content={<ChartTooltipContent labelKey="fullName" />} cursor={{fill: '#ffffff05'}} />
                           <Bar dataKey="msPlayed" fill="var(--color-msPlayed)" radius={[0, 2, 2, 0]} maxBarSize={24} />
                         </BarChart>
@@ -463,7 +495,7 @@ export default function SpotifyDashboard() {
                         <BarChart data={top10TracksChartData} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                           <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#ffffff15" />
                           <XAxis type="number" hide />
-                          <YAxis dataKey="name" type="category" width={120} tickLine={false} axisLine={false} stroke="#a3a3a3" fontSize={12} />
+                          <YAxis dataKey="name" type="category" width={140} tickLine={false} axisLine={false} stroke="#a3a3a3" fontSize={12} tick={(props) => <CustomYAxisTick {...props} data={top10TracksChartData} images={images} isTrack={true} />} />
                           <ChartTooltip content={<ChartTooltipContent labelKey="fullName" />} cursor={{fill: '#ffffff05'}} />
                           <Bar dataKey="playCount" fill="var(--color-playCount)" radius={[0, 2, 2, 0]} maxBarSize={24} />
                         </BarChart>
@@ -532,14 +564,14 @@ export default function SpotifyDashboard() {
                           <li key={`${track.name}-${track.artist}`} className="list-item-anim opacity-0 flex items-center justify-between p-5 transition-colors hover:bg-white/[0.02] group">
                             <div className="flex items-center space-x-5">
                               <div className="relative">
-                                {track.uri && images.tracks[track.uri] ? (
-                                  <img src={images.tracks[track.uri]} alt={track.name} className="w-12 h-12 rounded-lg object-cover bg-neutral-900 border border-white/10 group-hover:border-white/30 transition-colors" />
+                                {images.tracks[track.uri || `${track.name}-${track.artist}`] ? (
+                                  <img src={images.tracks[track.uri || `${track.name}-${track.artist}`]} alt={track.name} className="w-12 h-12 rounded-lg object-cover bg-neutral-900 border border-white/10 group-hover:border-white/30 transition-colors" />
                                 ) : (
                                   <span className="flex items-center justify-center w-12 h-12 text-sm font-light rounded-lg bg-white/[0.03] text-neutral-400 border border-white/[0.05]">
                                     {index + 1}
                                   </span>
                                 )}
-                                {track.uri && images.tracks[track.uri] && (
+                                {images.tracks[track.uri || `${track.name}-${track.artist}`] && (
                                   <span className="absolute -top-1 -left-1 flex items-center justify-center w-5 h-5 text-[10px] font-medium rounded-full bg-black border border-white/20 text-white shadow-sm">
                                     {index + 1}
                                   </span>

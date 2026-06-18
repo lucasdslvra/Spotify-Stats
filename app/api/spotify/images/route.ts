@@ -35,20 +35,27 @@ export async function POST(req: Request) {
 
     const trackImages: Record<string, string> = {};
     if (tracks && tracks.length > 0) {
-      // Extraire l'ID de l'URI (ex: "spotify:track:123" -> "123")
-      const trackIds = tracks.map((t: string) => t.split(':').pop()).filter(Boolean);
-      // L'API Spotify permet un maximum de 50 IDs par requête
-      const response = await fetch(`https://api.spotify.com/v1/tracks?ids=${trackIds.join(',')}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await response.json();
-      if (data.tracks) {
-        data.tracks.forEach((track: any, index: number) => {
-          if (track && track.album && track.album.images.length > 0) {
-            trackImages[tracks[index]] = track.album.images[0].url;
+      const searchPromises = tracks.map(async (t: any) => {
+        try {
+          const query = `track:${t.name} artist:${t.artist}`;
+          const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!response.ok) {
+            console.error(`Search API failed for ${query} with status:`, response.status);
+            return;
           }
-        });
-      }
+          const data = await response.json();
+          if (data.tracks && data.tracks.items.length > 0 && data.tracks.items[0].album.images.length > 0) {
+            trackImages[t.key] = data.tracks.items[0].album.images[0].url;
+          }
+        } catch (e) {
+          console.error(`Failed to fetch track ${t.name}`, e);
+        }
+      });
+      // Limit concurrency to avoid 429
+      // For simplicity, we can just do Promise.all, as limit is usually around 50-100 per rolling window
+      await Promise.all(searchPromises);
     }
 
     const artistImages: Record<string, string> = {};
