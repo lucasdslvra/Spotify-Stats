@@ -20,7 +20,7 @@ import { Bar, BarChart, Line, LineChart, CartesianGrid, XAxis, YAxis } from "rec
 import { cn } from "@/lib/utils";
 
 export default function SpotifyDashboard() {
-  const { processFiles, stats, isProcessing, error, availableYears, selectedYears, toggleYear, selectAllYears, clearAllYears } = useSpotifyData();
+  const { processFiles, stats, isProcessing, error, availableYears, selectedYears, toggleYear, selectAllYears, clearAllYears, images } = useSpotifyData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -443,9 +443,13 @@ export default function SpotifyDashboard() {
                         stats.topArtists.map((artist, index) => (
                           <li key={artist.name} className="flex items-center justify-between p-4 transition-colors hover:bg-slate-800/50">
                             <div className="flex items-center space-x-4">
-                              <span className="flex items-center justify-center w-8 h-8 text-sm font-bold rounded-full bg-slate-800 text-slate-400">
-                                {index + 1}
-                              </span>
+                              {images.artists[artist.name] ? (
+                                <img src={images.artists[artist.name]} alt={artist.name} className="w-10 h-10 rounded-full object-cover shadow-md bg-slate-800" />
+                              ) : (
+                                <span className="flex items-center justify-center w-10 h-10 text-sm font-bold rounded-full bg-slate-800 text-slate-400">
+                                  {index + 1}
+                                </span>
+                              )}
                               <span className="font-medium text-slate-200">{artist.name}</span>
                             </div>
                             <Badge variant="secondary" className="bg-green-500/10 text-green-400 hover:bg-green-500/20">
@@ -474,9 +478,13 @@ export default function SpotifyDashboard() {
                         stats.topTracks.map((track, index) => (
                           <li key={`${track.name}-${track.artist}`} className="flex items-center justify-between p-4 transition-colors hover:bg-slate-800/50">
                             <div className="flex items-center space-x-4">
-                              <span className="flex items-center justify-center w-8 h-8 text-sm font-bold rounded-full bg-slate-800 text-slate-400">
-                                {index + 1}
-                              </span>
+                              {track.uri && images.tracks[track.uri] ? (
+                                <img src={images.tracks[track.uri]} alt={track.name} className="w-10 h-10 rounded-md object-cover shadow-md bg-slate-800" />
+                              ) : (
+                                <span className="flex items-center justify-center w-10 h-10 text-sm font-bold rounded-md bg-slate-800 text-slate-400">
+                                  {index + 1}
+                                </span>
+                              )}
                               <div className="flex flex-col max-w-[200px] sm:max-w-[300px]">
                                 <span className="font-medium text-slate-200 truncate">{track.name}</span>
                                 <span className="text-sm text-slate-400 truncate">{track.artist}</span>

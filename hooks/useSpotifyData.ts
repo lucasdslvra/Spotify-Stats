@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 
 export interface SpotifyPlayHistory {
   ts: string;
@@ -33,6 +33,7 @@ export interface TrackStats {
   name: string;
   artist: string;
   playCount: number;
+  uri: string | null;
 }
 
 export interface MonthlyStats {
@@ -59,6 +60,11 @@ export const useSpotifyData = () => {
   const [selectedYears, setSelectedYears] = useState<number[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Cache pour stocker les images récupérées
+  const [images, setImages] = useState<{ artists: Record<string, string>, tracks: Record<string, string> }>({ artists: {}, tracks: {} });
+  // Ref pour éviter les requêtes multiples pour la même image (même si non trouvée)
+  const requestedImages = useRef<Set<string>>(new Set());
 
   const processFiles = async (files: File[]) => {
     setIsProcessing(true);
@@ -110,12 +116,65 @@ export const useSpotifyData = () => {
     setSelectedYears(availableYears);
   }, [availableYears]);
 
+  const yearlyData = useMemo(() => {
+    const map = new Map<number, {
+      totalMsPlayed: number;
+      artistMsMap: Map<string, number>;
+      trackCountMap: Map<string, { count: number; uri: string | null }>;
+      monthTrackCountMap: Record<number, Record<string, number>>;
+      monthYearMs: Record<number, number>;
+    }>();
+    
+    for (const entry of rawEntries) {
+      if (!entry.master_metadata_album_artist_name || !entry.master_metadata_track_name) continue;
+      if (entry.ms_played < 30000) continue;
+      
+      const date = new Date(entry.ts);
+      const entryYear = date.getFullYear();
+      const entryMonth = date.getMonth();
+      
+      if (!map.has(entryYear)) {
+        const monthTrackObj: Record<number, Record<string, number>> = {};
+        const monthYearMsObj: Record<number, number> = {};
+        for (let i = 0; i < 12; i++) {
+          monthTrackObj[i] = {};
+          monthYearMsObj[i] = 0;
+        }
+        map.set(entryYear, {
+          totalMsPlayed: 0,
+          artistMsMap: new Map(),
+          trackCountMap: new Map(),
+          monthTrackCountMap: monthTrackObj,
+          monthYearMs: monthYearMsObj
+        });
+      }
+      
+      const yearData = map.get(entryYear)!;
+      const artistName = entry.master_metadata_album_artist_name;
+      const trackName = entry.master_metadata_track_name;
+      const trackKey = `${trackName}::${artistName}`;
+
+      yearData.totalMsPlayed += entry.ms_played;
+      yearData.artistMsMap.set(artistName, (yearData.artistMsMap.get(artistName) || 0) + entry.ms_played);
+      
+      const currentTrack = yearData.trackCountMap.get(trackKey) || { count: 0, uri: null };
+      yearData.trackCountMap.set(trackKey, { 
+        count: currentTrack.count + 1, 
+        uri: currentTrack.uri || entry.spotify_track_uri 
+      });
+      
+      yearData.monthTrackCountMap[entryMonth][trackKey] = (yearData.monthTrackCountMap[entryMonth][trackKey] || 0) + 1;
+      yearData.monthYearMs[entryMonth] += entry.ms_played;
+    }
+    return map;
+  }, [rawEntries]);
+
   const stats = useMemo(() => {
     if (!rawEntries.length) return null;
 
     let totalMsPlayed = 0;
     const artistMsMap = new Map<string, number>();
-    const trackCountMap = new Map<string, number>();
+    const trackCountMap = new Map<string, { count: number, uri: string | null }>();
     const uniqueArtists = new Set<string>();
     const uniqueTracks = new Set<string>();
     
@@ -130,39 +189,32 @@ export const useSpotifyData = () => {
       });
     }
 
-    for (const entry of rawEntries) {
-      if (!entry.master_metadata_album_artist_name || !entry.master_metadata_track_name) {
-        continue;
-      }
-      if (entry.ms_played < 30000) {
-        continue;
-      }
-
-      const date = new Date(entry.ts);
-      const entryYear = date.getFullYear();
-      const entryMonth = date.getMonth();
-
-      // On n'intègre les données que si l'année est sélectionnée
-      if (!selectedYears.includes(entryYear)) {
-        continue;
-      }
-
-      // Stats mensuelles
-      if (monthYearMap[entryMonth]) {
-        monthYearMap[entryMonth][entryYear.toString()] = (monthYearMap[entryMonth][entryYear.toString()] || 0) + entry.ms_played;
-      }
-
-      const artistName = entry.master_metadata_album_artist_name;
-      const trackName = entry.master_metadata_track_name;
-      const trackKey = `${trackName}::${artistName}`;
-
-      totalMsPlayed += entry.ms_played;
-      artistMsMap.set(artistName, (artistMsMap.get(artistName) || 0) + entry.ms_played);
-      uniqueArtists.add(artistName);
-      trackCountMap.set(trackKey, (trackCountMap.get(trackKey) || 0) + 1);
-      uniqueTracks.add(trackKey);
+    for (const year of selectedYears) {
+      const yearData = yearlyData.get(year);
+      if (!yearData) continue;
       
-      monthTrackCountMap[entryMonth][trackKey] = (monthTrackCountMap[entryMonth][trackKey] || 0) + 1;
+      totalMsPlayed += yearData.totalMsPlayed;
+      
+      for (const [artist, ms] of yearData.artistMsMap.entries()) {
+        artistMsMap.set(artist, (artistMsMap.get(artist) || 0) + ms);
+        uniqueArtists.add(artist);
+      }
+      
+      for (const [trackKey, data] of yearData.trackCountMap.entries()) {
+        const current = trackCountMap.get(trackKey) || { count: 0, uri: null };
+        trackCountMap.set(trackKey, {
+           count: current.count + data.count,
+           uri: current.uri || data.uri
+        });
+        uniqueTracks.add(trackKey);
+      }
+      
+      for (let m = 0; m < 12; m++) {
+        monthYearMap[m][year.toString()] = yearData.monthYearMs[m];
+        for (const [trackKey, count] of Object.entries(yearData.monthTrackCountMap[m])) {
+           monthTrackCountMap[m][trackKey] = (monthTrackCountMap[m][trackKey] || 0) + count;
+        }
+      }
     }
 
     const topArtists = Array.from(artistMsMap.entries())
@@ -171,9 +223,9 @@ export const useSpotifyData = () => {
       .slice(0, 15);
 
     const topTracks = Array.from(trackCountMap.entries())
-      .map(([key, playCount]) => {
+      .map(([key, data]) => {
         const [name, artist] = key.split("::");
-        return { name, artist, playCount };
+        return { name, artist, playCount: data.count, uri: data.uri };
       })
       .sort((a, b) => b.playCount - a.playCount)
       .slice(0, 15);
@@ -208,7 +260,52 @@ export const useSpotifyData = () => {
       monthlyTopTracksStats,
       totalFiles,
     };
-  }, [rawEntries, selectedYears, totalFiles, availableYears]);
+  }, [yearlyData, selectedYears, totalFiles, availableYears]);
+
+  // Effect pour récupérer les images des Top Artistes et Top Titres
+  useEffect(() => {
+    if (!stats) return;
+
+    const fetchImages = async () => {
+      // Filtrer pour ne demander que ce qu'on n'a pas encore demandé
+      const missingArtists = stats.topArtists
+        .map(a => a.name)
+        .filter(name => !requestedImages.current.has(name));
+        
+      const missingTracks = stats.topTracks
+        .filter(t => t.uri && !requestedImages.current.has(t.uri))
+        .map(t => t.uri as string);
+
+      if (missingArtists.length === 0 && missingTracks.length === 0) return;
+
+      // Marquer comme demandé immédiatement
+      missingArtists.forEach(a => requestedImages.current.add(a));
+      missingTracks.forEach(t => requestedImages.current.add(t));
+
+      try {
+        const res = await fetch('/api/spotify/images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            artists: missingArtists,
+            tracks: missingTracks
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setImages(prev => ({
+            artists: { ...prev.artists, ...(data.artistImages || {}) },
+            tracks: { ...prev.tracks, ...(data.trackImages || {}) }
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch Spotify images", err);
+      }
+    };
+
+    fetchImages();
+  }, [stats]);
 
   const toggleYear = (year: number) => {
     setSelectedYears(prev => 
@@ -235,6 +332,7 @@ export const useSpotifyData = () => {
     selectedYears, 
     toggleYear, 
     selectAllYears,
-    clearAllYears
+    clearAllYears,
+    images
   };
 };
