@@ -83,13 +83,13 @@ export default function SpotifyDashboard() {
         const newLiveImages = { artists: {} as Record<string, string>, tracks: {} as Record<string, string> };
         const topArtists = data.artists.map((a: any, i: number) => {
           if (a.images?.[0]?.url) newLiveImages.artists[a.name] = a.images[0].url;
-          return { name: a.name, msPlayed: a.popularity || 0 };
+          return { name: a.name, msPlayed: a.popularity || Math.round(100 * Math.pow(0.92, i)) };
         });
         const topTracks = data.tracks.map((t: any, i: number) => {
           const artistName = t.artists[0].name;
           const key = t.uri || `${t.name}-${artistName}`;
           if (t.album?.images?.[0]?.url) newLiveImages.tracks[key] = t.album.images[0].url;
-          return { name: t.name, artist: artistName, playCount: t.popularity || 0, uri: t.uri };
+          return { name: t.name, artist: artistName, playCount: t.popularity || Math.round(100 * Math.pow(0.92, i)), uri: t.uri };
         });
         setLiveImages(newLiveImages);
         setLiveStats({
@@ -536,7 +536,8 @@ export default function SpotifyDashboard() {
               </Card>
             </div>
 
-            {/* Monthly Comparison Chart */}
+            {/* Monthly Evolution Chart */}
+            {!stats?.isLive && (
             <Card className="chart-card opacity-0 bg-transparent border-white/[0.08] text-neutral-200 rounded-3xl shadow-none overflow-hidden relative">
               <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
               <CardHeader className="pt-8 px-8">
@@ -574,8 +575,10 @@ export default function SpotifyDashboard() {
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* Top 5 Tracks Evolution Chart */}
+            {!stats?.isLive && (
             <Card className="chart-card opacity-0 bg-transparent border-white/[0.08] text-neutral-200 rounded-3xl shadow-none relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
               <CardHeader className="pt-8 px-8">
@@ -616,6 +619,7 @@ export default function SpotifyDashboard() {
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* Top 10 Charts (Bar) */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
