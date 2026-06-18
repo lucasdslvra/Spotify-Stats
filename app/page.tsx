@@ -83,16 +83,17 @@ export default function SpotifyDashboard() {
         const newLiveImages = { artists: {} as Record<string, string>, tracks: {} as Record<string, string> };
         const topArtists = data.artists.map((a: any, i: number) => {
           if (a.images?.[0]?.url) newLiveImages.artists[a.name] = a.images[0].url;
-          return { name: a.name, msPlayed: (50 - i) * 3600000 };
+          return { name: a.name, msPlayed: Math.round(100 * Math.pow(0.92, i)) };
         });
         const topTracks = data.tracks.map((t: any, i: number) => {
           const artistName = t.artists[0].name;
           const key = t.uri || `${t.name}-${artistName}`;
           if (t.album?.images?.[0]?.url) newLiveImages.tracks[key] = t.album.images[0].url;
-          return { name: t.name, artist: artistName, playCount: 50 - i, uri: t.uri };
+          return { name: t.name, artist: artistName, playCount: Math.round(100 * Math.pow(0.92, i)), uri: t.uri };
         });
         setLiveImages(newLiveImages);
         setLiveStats({
+          isLive: true,
           totalMsPlayed: 0,
           uniqueArtists: data.artists.length,
           uniqueTracks: data.tracks.length,
@@ -213,14 +214,14 @@ export default function SpotifyDashboard() {
 
   const topArtistsChartConfig = {
     msPlayed: {
-      label: "Heures d'écoute",
+      label: stats?.isLive ? "Score d'affinité" : "Heures d'écoute",
       color: "#10b981", // Emerald
     },
   } satisfies ChartConfig;
 
   const topTracksChartConfig = {
     playCount: {
-      label: "Écoutes",
+      label: stats?.isLive ? "Score d'affinité" : "Écoutes",
       color: "#8b5cf6", // Violet
     },
   } satisfies ChartConfig;
@@ -230,7 +231,7 @@ export default function SpotifyDashboard() {
     return stats.topArtists.slice(0, 10).map((a: any) => ({
       name: a.name.length > 15 ? a.name.substring(0, 15) + "..." : a.name,
       fullName: a.name,
-      msPlayed: Number((a.msPlayed / (1000 * 60 * 60)).toFixed(2))
+      msPlayed: stats.isLive ? a.msPlayed : Number((a.msPlayed / (1000 * 60 * 60)).toFixed(2))
     }));
   }, [stats]);
 
@@ -621,7 +622,7 @@ export default function SpotifyDashboard() {
               <Card className="chart-card opacity-0 bg-transparent border-white/[0.08] rounded-3xl shadow-none">
                 <CardHeader className="pt-8 px-8">
                   <CardTitle className="text-xl font-light text-white">Top Artistes</CardTitle>
-                  <CardDescription className="text-neutral-500 font-light">Heures d'écoute cumulées</CardDescription>
+                  <CardDescription className="text-neutral-500 font-light">{stats?.isLive ? "Score d'affinité estimé" : "Heures d'écoute cumulées"}</CardDescription>
                 </CardHeader>
                 <CardContent className="px-8 pb-8">
                   <div className="h-[350px]">
@@ -645,7 +646,7 @@ export default function SpotifyDashboard() {
               <Card className="chart-card opacity-0 bg-transparent border-white/[0.08] rounded-3xl shadow-none">
                 <CardHeader className="pt-8 px-8">
                   <CardTitle className="text-xl font-light text-white">Top Titres</CardTitle>
-                  <CardDescription className="text-neutral-500 font-light">Nombre de lectures</CardDescription>
+                  <CardDescription className="text-neutral-500 font-light">{stats?.isLive ? "Score d'affinité estimé" : "Nombre de lectures"}</CardDescription>
                 </CardHeader>
                 <CardContent className="px-8 pb-8">
                   <div className="h-[350px]">
@@ -697,7 +698,7 @@ export default function SpotifyDashboard() {
                               <span className="font-light text-neutral-200 group-hover:text-white transition-colors">{artist.name}</span>
                             </div>
                             <span className="text-sm font-light text-neutral-500 tabular-nums">
-                              {formatHours(artist.msPlayed)} h
+                              {stats?.isLive ? `Top ${index + 1}` : `${formatHours(artist.msPlayed)} h`}
                             </span>
                           </li>
                         ))
@@ -742,7 +743,7 @@ export default function SpotifyDashboard() {
                               </div>
                             </div>
                             <span className="text-sm font-light text-neutral-500 tabular-nums">
-                              {track.playCount.toLocaleString('fr-FR')} x
+                              {stats?.isLive ? `Top ${index + 1}` : `${track.playCount.toLocaleString('fr-FR')} x`}
                             </span>
                           </li>
                         ))
