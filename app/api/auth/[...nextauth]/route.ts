@@ -5,6 +5,7 @@ const scopes = [
   "user-read-email",
   "user-top-read",
   "user-read-recently-played",
+  "user-library-read",
 ].join(",")
 
 export const authOptions = {
