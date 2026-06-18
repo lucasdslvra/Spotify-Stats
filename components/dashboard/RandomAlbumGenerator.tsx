@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Shuffle, Disc3, Loader2, X } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,11 @@ export function RandomAlbumGenerator() {
   const [randomAlbum, setRandomAlbum] = useState<any>(null);
   const [isRandomAlbumLoading, setIsRandomAlbumLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchRandomAlbum = async () => {
     setIsRandomAlbumLoading(true);
@@ -27,8 +33,9 @@ export function RandomAlbumGenerator() {
   };
 
   return (
-    <Card className="chart-card opacity-0 bg-transparent border-emerald-500/20 text-neutral-200 rounded-3xl shadow-none relative overflow-hidden group">
-      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent pointer-events-none" />
+    <>
+      <Card className="chart-card opacity-0 bg-transparent border-emerald-500/20 text-neutral-200 rounded-3xl shadow-none relative overflow-hidden group">
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent pointer-events-none" />
       <CardHeader className="pt-6 px-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <CardTitle className="text-xl font-light text-white flex items-center gap-2">
@@ -48,9 +55,10 @@ export function RandomAlbumGenerator() {
           Piocher un album
         </Button>
       </CardHeader>
-      
-      {showModal && randomAlbum && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
+      </Card>
+
+      {mounted && showModal && randomAlbum && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
           <div className="relative w-full max-w-md overflow-hidden bg-[#0a0a0a] border border-white/10 rounded-3xl shadow-2xl animate-in zoom-in-95 duration-300">
             <button 
               onClick={() => setShowModal(false)}
@@ -87,8 +95,9 @@ export function RandomAlbumGenerator() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </Card>
+    </>
   );
 }
