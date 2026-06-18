@@ -84,9 +84,12 @@ export default function SpotifyDashboard() {
         const nodes: any[] = [];
         const links: any[] = [];
         
+        const artistSet = new Set<string>();
+        
         const topArtists = data.artists.map((a: any, i: number) => {
           if (a.images?.[0]?.url) newLiveImages.artists[a.name] = a.images[0].url;
           nodes.push({ id: a.name, val: Math.max(20, a.popularity || 20) });
+          artistSet.add(a.name);
           
           for (let j = i + 1; j < data.artists.length; j++) {
             const a2 = data.artists[j];
@@ -102,6 +105,28 @@ export default function SpotifyDashboard() {
           const artistName = t.artists[0].name;
           const key = t.uri || `${t.name}-${artistName}`;
           if (t.album?.images?.[0]?.url) newLiveImages.tracks[key] = t.album.images[0].url;
+          
+          // Add featurings to network map
+          if (t.artists && t.artists.length > 1) {
+            for (let x = 0; x < t.artists.length; x++) {
+              for (let y = x + 1; y < t.artists.length; y++) {
+                const aX = t.artists[x].name;
+                const aY = t.artists[y].name;
+                
+                if (!artistSet.has(aX)) {
+                  nodes.push({ id: aX, val: 10 }); // Smaller node for featured artists not in top 50
+                  artistSet.add(aX);
+                }
+                if (!artistSet.has(aY)) {
+                  nodes.push({ id: aY, val: 10 });
+                  artistSet.add(aY);
+                }
+                
+                links.push({ source: aX, target: aY, value: 2 }); // Link between featured artists
+              }
+            }
+          }
+          
           return { name: t.name, artist: artistName, playCount: Math.round(100 * Math.pow(0.92, i)), uri: t.uri };
         });
         setLiveImages(newLiveImages);
