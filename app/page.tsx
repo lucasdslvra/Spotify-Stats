@@ -83,13 +83,13 @@ export default function SpotifyDashboard() {
         const newLiveImages = { artists: {} as Record<string, string>, tracks: {} as Record<string, string> };
         const topArtists = data.artists.map((a: any, i: number) => {
           if (a.images?.[0]?.url) newLiveImages.artists[a.name] = a.images[0].url;
-          return { name: a.name, msPlayed: Math.round(100 * Math.pow(0.92, i)) };
+          return { name: a.name, msPlayed: a.popularity || 0 };
         });
         const topTracks = data.tracks.map((t: any, i: number) => {
           const artistName = t.artists[0].name;
           const key = t.uri || `${t.name}-${artistName}`;
           if (t.album?.images?.[0]?.url) newLiveImages.tracks[key] = t.album.images[0].url;
-          return { name: t.name, artist: artistName, playCount: Math.round(100 * Math.pow(0.92, i)), uri: t.uri };
+          return { name: t.name, artist: artistName, playCount: t.popularity || 0, uri: t.uri };
         });
         setLiveImages(newLiveImages);
         setLiveStats({
@@ -214,14 +214,14 @@ export default function SpotifyDashboard() {
 
   const topArtistsChartConfig = {
     msPlayed: {
-      label: stats?.isLive ? "Score d'affinité" : "Heures d'écoute",
+      label: stats?.isLive ? "Popularité" : "Heures d'écoute",
       color: "#10b981", // Emerald
     },
   } satisfies ChartConfig;
 
   const topTracksChartConfig = {
     playCount: {
-      label: stats?.isLive ? "Score d'affinité" : "Écoutes",
+      label: stats?.isLive ? "Popularité" : "Écoutes",
       color: "#8b5cf6", // Violet
     },
   } satisfies ChartConfig;
@@ -622,7 +622,7 @@ export default function SpotifyDashboard() {
               <Card className="chart-card opacity-0 bg-transparent border-white/[0.08] rounded-3xl shadow-none">
                 <CardHeader className="pt-8 px-8">
                   <CardTitle className="text-xl font-light text-white">Top Artistes</CardTitle>
-                  <CardDescription className="text-neutral-500 font-light">{stats?.isLive ? "Score d'affinité estimé" : "Heures d'écoute cumulées"}</CardDescription>
+                  <CardDescription className="text-neutral-500 font-light">{stats?.isLive ? "Indice de popularité mondiale (Spotify)" : "Heures d'écoute cumulées"}</CardDescription>
                 </CardHeader>
                 <CardContent className="px-8 pb-8">
                   <div className="h-[350px]">
@@ -646,7 +646,7 @@ export default function SpotifyDashboard() {
               <Card className="chart-card opacity-0 bg-transparent border-white/[0.08] rounded-3xl shadow-none">
                 <CardHeader className="pt-8 px-8">
                   <CardTitle className="text-xl font-light text-white">Top Titres</CardTitle>
-                  <CardDescription className="text-neutral-500 font-light">{stats?.isLive ? "Score d'affinité estimé" : "Nombre de lectures"}</CardDescription>
+                  <CardDescription className="text-neutral-500 font-light">{stats?.isLive ? "Indice de popularité mondiale (Spotify)" : "Nombre de lectures"}</CardDescription>
                 </CardHeader>
                 <CardContent className="px-8 pb-8">
                   <div className="h-[350px]">
