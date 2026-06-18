@@ -1,11 +1,12 @@
 import React, { useState } from "react";
-import { Shuffle, Disc3, Loader2 } from "lucide-react";
+import { Shuffle, Disc3, Loader2, X } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 export function RandomAlbumGenerator() {
   const [randomAlbum, setRandomAlbum] = useState<any>(null);
   const [isRandomAlbumLoading, setIsRandomAlbumLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   const fetchRandomAlbum = async () => {
     setIsRandomAlbumLoading(true);
@@ -14,6 +15,7 @@ export function RandomAlbumGenerator() {
       if (res.ok) {
         const data = await res.json();
         setRandomAlbum(data.album);
+        setShowModal(true);
       } else {
         console.error("Erreur lors de la récupération de l'album aléatoire");
       }
@@ -46,35 +48,46 @@ export function RandomAlbumGenerator() {
           Piocher un album
         </Button>
       </CardHeader>
-      {randomAlbum && (
-        <CardContent className="px-8 pb-8 pt-2">
-          <div className="flex items-center gap-6 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.05] animate-in fade-in zoom-in-95 duration-500">
-            {randomAlbum.images?.[0]?.url ? (
-              <img src={randomAlbum.images[0].url} alt={randomAlbum.name} className="w-24 h-24 rounded-xl object-cover shadow-lg border border-white/10" />
-            ) : (
-              <div className="w-24 h-24 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
-                <Disc3 className="w-8 h-8 text-neutral-500" />
+      
+      {showModal && randomAlbum && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="relative w-full max-w-md overflow-hidden bg-[#0a0a0a] border border-white/10 rounded-3xl shadow-2xl animate-in zoom-in-95 duration-300">
+            <button 
+              onClick={() => setShowModal(false)}
+              className="absolute top-4 right-4 z-10 p-2 text-white/70 bg-black/40 hover:text-white hover:bg-black/60 rounded-full transition-colors backdrop-blur-md"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="relative w-full aspect-square">
+              {randomAlbum.images?.[0]?.url ? (
+                <img src={randomAlbum.images[0].url} alt={randomAlbum.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-white/5 flex items-center justify-center">
+                  <Disc3 className="w-32 h-32 text-neutral-500" />
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/60 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 p-8 flex flex-col items-center text-center">
+                <h3 className="text-3xl font-bold text-white tracking-tight mb-2 line-clamp-2 leading-tight">{randomAlbum.name}</h3>
+                <p className="text-xl font-light text-neutral-300 mb-2">{randomAlbum.artists?.map((a: any) => a.name).join(", ")}</p>
+                <div className="flex items-center gap-3 mb-8 text-sm text-neutral-400 font-light">
+                  <span>{randomAlbum.release_date?.substring(0, 4)}</span>
+                  <span>•</span>
+                  <span>{randomAlbum.total_tracks} titres</span>
+                </div>
+                <a 
+                  href={randomAlbum.external_urls?.spotify} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="px-8 py-3 bg-[#1DB954] hover:bg-[#1ed760] text-black font-medium rounded-full transition-all duration-300 shadow-[0_0_20px_-5px_rgba(29,185,84,0.5)] hover:shadow-[0_0_30px_-5px_rgba(29,185,84,0.8)] hover:-translate-y-1 flex items-center gap-2"
+                >
+                  <Disc3 className="w-5 h-5" />
+                  Écouter l'album
+                </a>
               </div>
-            )}
-            <div className="flex flex-col gap-1">
-              <span className="text-2xl font-medium text-white tracking-tight">{randomAlbum.name}</span>
-              <span className="text-neutral-400 text-lg">{randomAlbum.artists?.map((a: any) => a.name).join(", ")}</span>
-              <div className="flex items-center gap-3 mt-2 text-sm text-neutral-500">
-                <span>{randomAlbum.release_date?.substring(0, 4)}</span>
-                <span>•</span>
-                <span>{randomAlbum.total_tracks} titres</span>
-              </div>
-              <a 
-                href={randomAlbum.external_urls?.spotify} 
-                target="_blank" 
-                rel="noreferrer"
-                className="mt-2 text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors"
-              >
-                Écouter sur Spotify →
-              </a>
             </div>
           </div>
-        </CardContent>
+        </div>
       )}
     </Card>
   );
