@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 export interface SpotifyPlayHistory {
   ts: string;
@@ -35,19 +35,27 @@ export interface TrackStats {
   playCount: number;
 }
 
+export interface MonthlyStats {
+  month: string;
+  [key: string]: number | string;
+}
+
 export interface SpotifyStats {
   totalMsPlayed: number;
   uniqueArtists: number;
   uniqueTracks: number;
   topArtists: ArtistStats[];
   topTracks: TrackStats[];
+  monthlyStats: MonthlyStats[];
   totalFiles: number;
 }
+
+const MONTH_NAMES = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
 
 export const useSpotifyData = () => {
   const [rawEntries, setRawEntries] = useState<SpotifyPlayHistory[]>([]);
   const [totalFiles, setTotalFiles] = useState(0);
-  const [selectedYear, setSelectedYear] = useState<number | "all">("all");
+  const [selectedYears, setSelectedYears] = useState<number[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,8 +85,6 @@ export const useSpotifyData = () => {
       
       setRawEntries(allEntries);
       setTotalFiles(files.length);
-      // Réinitialiser l'année sélectionnée lors d'un nouvel import
-      setSelectedYear("all");
     } catch (err: any) {
       setError(err.message || "Une erreur inattendue s'est produite.");
     } finally {
@@ -98,6 +104,11 @@ export const useSpotifyData = () => {
     return Array.from(years).sort((a, b) => b - a);
   }, [rawEntries]);
 
+  // Initialiser les années sélectionnées avec toutes les années disponibles au chargement
+  useEffect(() => {
+    setSelectedYears(availableYears);
+  }, [availableYears]);
+
   const stats = useMemo(() => {
     if (!rawEntries.length) return null;
 
@@ -106,6 +117,15 @@ export const useSpotifyData = () => {
     const trackCountMap = new Map<string, number>();
     const uniqueArtists = new Set<string>();
     const uniqueTracks = new Set<string>();
+    
+    // Structure pour les stats mensuelles
+    const monthYearMap: Record<number, Record<string, number>> = {};
+    for (let i = 0; i < 12; i++) {
+      monthYearMap[i] = {};
+      availableYears.forEach(y => {
+        monthYearMap[i][y.toString()] = 0;
+      });
+    }
 
     for (const entry of rawEntries) {
       if (!entry.master_metadata_album_artist_name || !entry.master_metadata_track_name) {
@@ -115,11 +135,18 @@ export const useSpotifyData = () => {
         continue;
       }
 
-      if (selectedYear !== "all") {
-        const entryYear = new Date(entry.ts).getFullYear();
-        if (entryYear !== selectedYear) {
-          continue;
-        }
+      const date = new Date(entry.ts);
+      const entryYear = date.getFullYear();
+      const entryMonth = date.getMonth();
+
+      // On n'intègre les données que si l'année est sélectionnée
+      if (!selectedYears.includes(entryYear)) {
+        continue;
+      }
+
+      // Stats mensuelles
+      if (monthYearMap[entryMonth]) {
+        monthYearMap[entryMonth][entryYear.toString()] = (monthYearMap[entryMonth][entryYear.toString()] || 0) + entry.ms_played;
       }
 
       const artistName = entry.master_metadata_album_artist_name;
@@ -146,15 +173,47 @@ export const useSpotifyData = () => {
       .sort((a, b) => b.playCount - a.playCount)
       .slice(0, 15);
 
+    // Formatage des stats mensuelles (on renvoie uniquement pour les années sélectionnées)
+    const monthlyStats: MonthlyStats[] = MONTH_NAMES.map((month, index) => {
+      const data: MonthlyStats = { month };
+      selectedYears.forEach(year => {
+        const ms = monthYearMap[index][year.toString()] || 0;
+        data[year.toString()] = Number((ms / (1000 * 60 * 60)).toFixed(2));
+      });
+      return data;
+    });
+
     return {
       totalMsPlayed,
       uniqueArtists: uniqueArtists.size,
       uniqueTracks: uniqueTracks.size,
       topArtists,
       topTracks,
+      monthlyStats,
       totalFiles,
     };
-  }, [rawEntries, selectedYear, totalFiles]);
+  }, [rawEntries, selectedYears, totalFiles, availableYears]);
 
-  return { processFiles, stats, isProcessing, error, availableYears, selectedYear, setSelectedYear };
+  const toggleYear = (year: number) => {
+    setSelectedYears(prev => 
+      prev.includes(year) 
+        ? prev.filter(y => y !== year)
+        : [...prev, year].sort((a, b) => b - a)
+    );
+  };
+
+  const selectAllYears = () => {
+    setSelectedYears(availableYears);
+  };
+
+  return { 
+    processFiles, 
+    stats, 
+    isProcessing, 
+    error, 
+    availableYears, 
+    selectedYears, 
+    toggleYear, 
+    selectAllYears 
+  };
 };

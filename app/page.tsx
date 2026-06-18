@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { UploadCloud, Clock, Music, Users, FileJson, Loader2, Calendar } from "lucide-react";
 import { useSpotifyData } from "@/hooks/useSpotifyData";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,16 +9,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+} from "@/components/ui/chart";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
 
 export default function SpotifyDashboard() {
-  const { processFiles, stats, isProcessing, error, availableYears, selectedYear, setSelectedYear } = useSpotifyData();
+  const { processFiles, stats, isProcessing, error, availableYears, selectedYears, toggleYear, selectAllYears } = useSpotifyData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -51,6 +53,53 @@ export default function SpotifyDashboard() {
   const formatHours = (ms: number) => {
     return (ms / (1000 * 60 * 60)).toFixed(1);
   };
+
+  // Configurations dynamiques pour les graphiques
+  const monthChartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    const colors = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
+    availableYears.forEach((year, i) => {
+      config[year.toString()] = {
+        label: year.toString(),
+        color: colors[i % colors.length],
+      };
+    });
+    return config;
+  }, [availableYears]);
+
+  const topArtistsChartConfig = {
+    msPlayed: {
+      label: "Heures d'écoute",
+      color: "#22c55e",
+    },
+  } satisfies ChartConfig;
+
+  const topTracksChartConfig = {
+    playCount: {
+      label: "Écoutes",
+      color: "#22c55e",
+    },
+  } satisfies ChartConfig;
+
+  const top10ArtistsChartData = useMemo(() => {
+    if (!stats) return [];
+    return stats.topArtists.slice(0, 10).map(a => ({
+      name: a.name.length > 15 ? a.name.substring(0, 15) + "..." : a.name,
+      fullName: a.name,
+      msPlayed: Number((a.msPlayed / (1000 * 60 * 60)).toFixed(2))
+    }));
+  }, [stats]);
+
+  const top10TracksChartData = useMemo(() => {
+    if (!stats) return [];
+    return stats.topTracks.slice(0, 10).map(t => ({
+      name: t.name.length > 15 ? t.name.substring(0, 15) + "..." : t.name,
+      fullName: `${t.name} - ${t.artist}`,
+      playCount: t.playCount
+    }));
+  }, [stats]);
+
+  const isAllYearsSelected = availableYears.length > 0 && selectedYears.length === availableYears.length;
 
   const renderUploadArea = () => (
     <div
@@ -103,37 +152,55 @@ export default function SpotifyDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-green-500/30">
+    <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-green-500/30 pb-20">
       <main className="container max-w-6xl px-6 py-12 mx-auto space-y-8">
-        <header className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+        <header className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-start">
           <div className="space-y-2">
             <h1 className="text-4xl font-extrabold tracking-tight text-white lg:text-5xl">
               Spotify <span className="text-green-500">Extended</span> Stats
             </h1>
-            <p className="text-lg text-slate-400">
+            <p className="text-lg text-slate-400 max-w-2xl">
               Analysez en profondeur votre historique d'écoute à partir des données étendues de Spotify.
             </p>
           </div>
           
           {stats && availableYears.length > 0 && (
-            <div className="flex items-center space-x-3 bg-slate-900/50 p-2 rounded-lg border border-slate-800 backdrop-blur-sm">
-              <Calendar className="w-5 h-5 text-slate-400" />
-              <Select
-                value={selectedYear.toString()}
-                onValueChange={(val) => setSelectedYear(val === "all" ? "all" : parseInt(val as string, 10))}
-              >
-                <SelectTrigger className="w-[180px] bg-slate-950 border-slate-700 text-slate-200">
-                  <SelectValue placeholder="Sélectionner une année" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
-                  <SelectItem value="all">Toutes les années</SelectItem>
-                  {availableYears.map((year) => (
-                    <SelectItem key={year} value={year.toString()}>
+            <div className="flex flex-col gap-2 p-4 bg-slate-900/50 rounded-xl border border-slate-800 backdrop-blur-sm min-w-[280px]">
+              <div className="flex items-center gap-2 text-slate-400 mb-1">
+                <Calendar className="w-4 h-4" />
+                <span className="text-sm font-medium">Filtrer par année</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge 
+                  variant={isAllYearsSelected ? "default" : "outline"}
+                  className={cn(
+                    "cursor-pointer transition-all", 
+                    isAllYearsSelected ? "bg-green-500 hover:bg-green-600 text-slate-950" : "text-slate-400 border-slate-700 hover:border-slate-500 hover:bg-slate-800"
+                  )}
+                  onClick={selectAllYears}
+                >
+                  Toutes
+                </Badge>
+                {availableYears.map(year => {
+                  const isSelected = selectedYears.includes(year);
+                  return (
+                    <Badge 
+                      key={year}
+                      variant={isSelected && !isAllYearsSelected ? "default" : "outline"}
+                      className={cn(
+                        "cursor-pointer transition-all", 
+                        isSelected && !isAllYearsSelected 
+                          ? "bg-slate-700 hover:bg-slate-600 text-white border-transparent" 
+                          : "text-slate-400 border-slate-700 hover:border-slate-500 hover:bg-slate-800",
+                        isAllYearsSelected && "opacity-60"
+                      )}
+                      onClick={() => toggleYear(year)}
+                    >
                       {year}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </Badge>
+                  );
+                })}
+              </div>
             </div>
           )}
         </header>
@@ -162,7 +229,7 @@ export default function SpotifyDashboard() {
           </div>
         )}
 
-        {/* Dashboard KPIs */}
+        {/* Dashboard KPIs & Charts */}
         {stats && !isProcessing && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
             {/* Matrices KPI */}
@@ -208,23 +275,104 @@ export default function SpotifyDashboard() {
               </Card>
             </div>
 
-            {/* Classements détaillés */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {/* Top Artistes */}
-              <Card className="flex flex-col overflow-hidden bg-slate-900 border-slate-800">
-                <CardHeader className="border-b border-slate-800/50 bg-slate-900/50 flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl text-slate-100">Top 15 Artistes</CardTitle>
-                    <CardDescription className="text-slate-400">Classement par volume horaire d'écoute</CardDescription>
-                  </div>
-                  {selectedYear !== "all" && (
-                    <Badge variant="outline" className="text-green-500 border-green-500/30 bg-green-500/10">
-                      {selectedYear}
-                    </Badge>
+            {/* Monthly Comparison Chart */}
+            <Card className="bg-slate-900 border-slate-800 text-slate-200">
+              <CardHeader>
+                <CardTitle>Évolution de l'écoute par mois</CardTitle>
+                <CardDescription className="text-slate-400">Comparaison du volume horaire (en heures) par mois pour les années sélectionnées</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px] w-full">
+                  {selectedYears.length > 0 ? (
+                    <ChartContainer config={monthChartConfig} className="h-[400px] w-full">
+                      <BarChart data={stats.monthlyStats} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
+                        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} stroke="#94a3b8" />
+                        <YAxis tickLine={false} axisLine={false} tickMargin={8} stroke="#94a3b8" />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <ChartLegend content={<ChartLegendContent />} />
+                        {availableYears.map(year => (
+                          selectedYears.includes(year) && (
+                            <Bar 
+                              key={year} 
+                              dataKey={year.toString()} 
+                              fill={`var(--color-${year})`} 
+                              radius={[4, 4, 0, 0]} 
+                            />
+                          )
+                        ))}
+                      </BarChart>
+                    </ChartContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-500">
+                      Sélectionnez au moins une année pour afficher le graphique
+                    </div>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Top 10 Charts (Bar) */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Top 10 Artists Chart */}
+              <Card className="bg-slate-900 border-slate-800">
+                <CardHeader>
+                  <CardTitle className="text-slate-100">Top 10 Artistes</CardTitle>
+                  <CardDescription className="text-slate-400">Heures d'écoute cumulées</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[350px]">
+                    {top10ArtistsChartData.length > 0 ? (
+                      <ChartContainer config={topArtistsChartConfig} className="h-full w-full">
+                        <BarChart data={top10ArtistsChartData} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                          <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis type="number" hide />
+                          <YAxis dataKey="name" type="category" width={100} tickLine={false} axisLine={false} stroke="#94a3b8" fontSize={12} />
+                          <ChartTooltip content={<ChartTooltipContent labelKey="fullName" />} />
+                          <Bar dataKey="msPlayed" fill="var(--color-msPlayed)" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ChartContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-slate-500">Aucune donnée</div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Top 10 Tracks Chart */}
+              <Card className="bg-slate-900 border-slate-800">
+                <CardHeader>
+                  <CardTitle className="text-slate-100">Top 10 Titres</CardTitle>
+                  <CardDescription className="text-slate-400">Nombre de lectures</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[350px]">
+                    {top10TracksChartData.length > 0 ? (
+                      <ChartContainer config={topTracksChartConfig} className="h-full w-full">
+                        <BarChart data={top10TracksChartData} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                          <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#334155" />
+                          <XAxis type="number" hide />
+                          <YAxis dataKey="name" type="category" width={120} tickLine={false} axisLine={false} stroke="#94a3b8" fontSize={12} />
+                          <ChartTooltip content={<ChartTooltipContent labelKey="fullName" />} />
+                          <Bar dataKey="playCount" fill="var(--color-playCount)" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ChartContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-slate-500">Aucune donnée</div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Listes détaillées Top 15 (existantes) */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <Card className="flex flex-col overflow-hidden bg-slate-900 border-slate-800">
+                <CardHeader className="border-b border-slate-800/50 bg-slate-900/50">
+                  <CardTitle className="text-xl text-slate-100">Détail Top 15 Artistes</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 p-0">
-                  <ScrollArea className="h-[450px]">
+                  <ScrollArea className="h-[350px]">
                     <ul className="divide-y divide-slate-800/50">
                       {stats.topArtists.length > 0 ? (
                         stats.topArtists.map((artist, index) => (
@@ -242,7 +390,7 @@ export default function SpotifyDashboard() {
                         ))
                       ) : (
                         <div className="flex items-center justify-center h-full p-8 text-slate-500">
-                          Aucune donnée pour cette année
+                          Aucune donnée
                         </div>
                       )}
                     </ul>
@@ -250,21 +398,12 @@ export default function SpotifyDashboard() {
                 </CardContent>
               </Card>
 
-              {/* Top Titres */}
               <Card className="flex flex-col overflow-hidden bg-slate-900 border-slate-800">
-                <CardHeader className="border-b border-slate-800/50 bg-slate-900/50 flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl text-slate-100">Top 15 Titres</CardTitle>
-                    <CardDescription className="text-slate-400">Classement par nombre de lectures</CardDescription>
-                  </div>
-                  {selectedYear !== "all" && (
-                    <Badge variant="outline" className="text-green-500 border-green-500/30 bg-green-500/10">
-                      {selectedYear}
-                    </Badge>
-                  )}
+                <CardHeader className="border-b border-slate-800/50 bg-slate-900/50">
+                  <CardTitle className="text-xl text-slate-100">Détail Top 15 Titres</CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 p-0">
-                  <ScrollArea className="h-[450px]">
+                  <ScrollArea className="h-[350px]">
                     <ul className="divide-y divide-slate-800/50">
                       {stats.topTracks.length > 0 ? (
                         stats.topTracks.map((track, index) => (
@@ -285,7 +424,7 @@ export default function SpotifyDashboard() {
                         ))
                       ) : (
                         <div className="flex items-center justify-center h-full p-8 text-slate-500">
-                          Aucune donnée pour cette année
+                          Aucune donnée
                         </div>
                       )}
                     </ul>
