@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import dynamic from 'next/dynamic';
+
+const ArtistNetworkMap = dynamic(
+  () => import('@/components/ArtistNetworkMap').then(mod => mod.ArtistNetworkMap),
+  { ssr: false, loading: () => <div className="h-[600px] w-full bg-white/[0.02] animate-pulse rounded-3xl" /> }
+);
 import {
   ChartConfig,
   ChartContainer,
@@ -597,6 +603,13 @@ export default function SpotifyDashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Network Map */}
+            {stats.networkData && stats.networkData.nodes.length > 0 && (
+              <div className="mt-6">
+                <ArtistNetworkMap data={stats.networkData} images={images.artists} />
+              </div>
+            )}
           </div>
         )}
       </main>

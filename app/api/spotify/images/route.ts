@@ -59,25 +59,33 @@ export async function POST(req: Request) {
     }
 
     const artistImages: Record<string, string> = {};
+    const artistGenres: Record<string, string[]> = {};
     if (artists && artists.length > 0) {
-      // Recherche individuelle pour chaque artiste
-      const artistPromises = artists.map(async (artistName: string) => {
-        try {
-          const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          const data = await response.json();
-          if (data.artists && data.artists.items.length > 0 && data.artists.items[0].images.length > 0) {
-            artistImages[artistName] = data.artists.items[0].images[0].url;
+      // Chunk by 10 to avoid rate limits
+      for (let i = 0; i < artists.length; i += 10) {
+        const chunk = artists.slice(i, i + 10);
+        await Promise.all(chunk.map(async (artistName: string) => {
+          try {
+            const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await response.json();
+            if (data.artists && data.artists.items.length > 0) {
+              if (data.artists.items[0].images.length > 0) {
+                artistImages[artistName] = data.artists.items[0].images[0].url;
+              }
+              if (data.artists.items[0].genres) {
+                artistGenres[artistName] = data.artists.items[0].genres;
+              }
+            }
+          } catch (e) {
+            console.error(`Failed to fetch artist ${artistName}`, e);
           }
-        } catch (e) {
-          console.error(`Failed to fetch artist ${artistName}`, e);
-        }
-      });
-      await Promise.all(artistPromises);
+        }));
+      }
     }
 
-    return NextResponse.json({ trackImages, artistImages });
+    return NextResponse.json({ trackImages, artistImages, artistGenres });
   } catch (error: any) {
     console.error('Spotify API Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
