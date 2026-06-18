@@ -33,6 +33,9 @@ export function ArtistNetworkMap({ data, images }: ArtistNetworkMapProps) {
     return () => window.removeEventListener("resize", updateDimensions);
   }, []);
 
+  // State to trigger re-renders when images load
+  const [imagesLoaded, setImagesLoaded] = useState(0);
+
   // Pre-load images for canvas drawing
   const nodeImages = useMemo(() => {
     const imgs: Record<string, HTMLImageElement> = {};
@@ -40,6 +43,7 @@ export function ArtistNetworkMap({ data, images }: ArtistNetworkMapProps) {
       if (images[node.id]) {
         const img = new Image();
         img.src = images[node.id];
+        img.onload = () => setImagesLoaded(prev => prev + 1);
         imgs[node.id] = img;
       }
     });
