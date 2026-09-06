@@ -1,103 +1,150 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { getSpotifyBasicAuth } from "@/lib/env";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import type { SpotifyArtist, SpotifyTrack } from "@/lib/spotify";
 
-const getAccessToken = async () => {
-  const clientId = process.env.SPOTIFY_CLIENT_ID;
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-  if (!clientId || !clientSecret) {
-    throw new Error('Missing Spotify credentials in .env.local');
+/** Bornes de la requête, pour éviter qu'un appelant ne déclenche des milliers d'appels Spotify. */
+const MAX_ARTISTS = 250;
+const MAX_TRACKS = 120;
+const CHUNK_SIZE = 8;
+const CHUNK_DELAY_MS = 150;
+
+/** Quota par IP : 30 requêtes par minute. */
+const RATE_LIMIT = 30;
+const RATE_WINDOW_MS = 60 * 1000;
+
+interface TrackQuery {
+  key: string;
+  name: string;
+  artist: string;
+}
+
+/**
+ * Token « client credentials » mutualisé entre les requêtes de la même instance.
+ * Sans ce cache, chaque appel consommait un token Spotify supplémentaire.
+ */
+let cachedToken: { value: string; expiresAt: number } | null = null;
+
+async function getAccessToken(): Promise<string> {
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
+    return cachedToken.value;
   }
 
-  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-
-  const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
+  const response = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
     headers: {
-      Authorization: `Basic ${basic}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${getSpotifyBasicAuth()}`,
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: 'grant_type=client_credentials',
-    cache: 'no-store',
+    body: "grant_type=client_credentials",
+    cache: "no-store",
   });
 
   if (!response.ok) {
-    throw new Error('Failed to fetch Spotify access token');
+    throw new Error("Échec de l'authentification auprès de Spotify");
   }
 
   const data = await response.json();
-  return data.access_token;
-};
+  cachedToken = {
+    value: data.access_token,
+    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
+  };
+  return cachedToken.value;
+}
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Exécute `task` par paquets, avec une pause entre chaque paquet (anti-429). */
+async function inChunks<T>(items: T[], task: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    await Promise.all(items.slice(i, i + CHUNK_SIZE).map(task));
+    if (i + CHUNK_SIZE < items.length) await delay(CHUNK_DELAY_MS);
+  }
+}
 
 export async function POST(req: Request) {
-  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+  const limit = rateLimit(`images:${getClientIp(req)}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!limit.success) {
+    return NextResponse.json(
+      { error: "Trop de requêtes. Patientez quelques instants." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
+    );
+  }
+
   try {
-    const { tracks, artists } = await req.json();
+    const body = await req.json();
+
+    const tracks: TrackQuery[] = Array.isArray(body?.tracks)
+      ? body.tracks
+          .filter((t: unknown): t is TrackQuery => {
+            const track = t as TrackQuery;
+            return Boolean(track?.key && track?.name && track?.artist);
+          })
+          .slice(0, MAX_TRACKS)
+      : [];
+
+    const artists: string[] = Array.isArray(body?.artists)
+      ? body.artists
+          .filter((a: unknown): a is string => typeof a === "string" && a.length > 0)
+          .slice(0, MAX_ARTISTS)
+      : [];
+
+    if (tracks.length === 0 && artists.length === 0) {
+      return NextResponse.json({ trackImages: {}, artistImages: {}, artistGenres: {} });
+    }
+
     const token = await getAccessToken();
+    const authHeaders = { Authorization: `Bearer ${token}` };
 
     const trackImages: Record<string, string> = {};
-    if (tracks && tracks.length > 0) {
-      // Process tracks in chunks of 5
-      for (let i = 0; i < tracks.length; i += 5) {
-        const chunk = tracks.slice(i, i + 5);
-        await Promise.all(chunk.map(async (t: any) => {
-          try {
-            const query = `track:${t.name} artist:${t.artist}`;
-            const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            if (!response.ok) {
-              console.error(`Search API failed for ${query} with status:`, response.status);
-              return;
-            }
-            const data = await response.json();
-            if (data.tracks && data.tracks.items.length > 0 && data.tracks.items[0].album.images.length > 0) {
-              trackImages[t.key] = data.tracks.items[0].album.images[0].url;
-            }
-          } catch (e) {
-            console.error(`Failed to fetch track ${t.name}`, e);
-          }
-        }));
-        if (i + 5 < tracks.length) await delay(300);
+    await inChunks(tracks, async (track) => {
+      try {
+        const query = `track:${track.name} artist:${track.artist}`;
+        const response = await fetch(
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`,
+          { headers: authHeaders, cache: "no-store" },
+        );
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const item: SpotifyTrack | undefined = data.tracks?.items?.[0];
+        const image = item?.album?.images?.[0]?.url;
+        if (image) trackImages[track.key] = image;
+      } catch {
+        // Une pochette manquante n'est pas bloquante : on ignore l'échec.
       }
-    }
+    });
 
     const artistImages: Record<string, string> = {};
     const artistGenres: Record<string, string[]> = {};
-    if (artists && artists.length > 0) {
-      // Chunk by 5 to avoid rate limits and add delay
-      for (let i = 0; i < artists.length; i += 5) {
-        const chunk = artists.slice(i, i + 5);
-        await Promise.all(chunk.map(async (artistName: string) => {
-          try {
-            const response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            if (!response.ok) {
-              if (response.status === 429) {
-                console.warn(`Rate limit hit for ${artistName}`);
-              }
-              return;
-            }
-            const data = await response.json();
-            if (data.artists && data.artists.items.length > 0) {
-              if (data.artists.items[0].images.length > 0) {
-                artistImages[artistName] = data.artists.items[0].images[0].url;
-              }
-              if (data.artists.items[0].genres) {
-                artistGenres[artistName] = data.artists.items[0].genres;
-              }
-            }
-          } catch (e) {
-            console.error(`Failed to fetch artist ${artistName}`, e);
-          }
-        }));
-        if (i + 5 < artists.length) await delay(300);
+    await inChunks(artists, async (artistName) => {
+      try {
+        const response = await fetch(
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`,
+          { headers: authHeaders, cache: "no-store" },
+        );
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const item: SpotifyArtist | undefined = data.artists?.items?.[0];
+        if (!item) return;
+
+        if (item.images?.[0]?.url) artistImages[artistName] = item.images[0].url;
+        if (item.genres?.length) artistGenres[artistName] = item.genres;
+      } catch {
+        // Idem : on continue avec les artistes restants.
       }
-    }
+    });
 
     return NextResponse.json({ trackImages, artistImages, artistGenres });
-  } catch (error: any) {
-    console.error('Spotify API Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    console.error("Spotify Images API Error:", error);
+    return NextResponse.json(
+      { error: "Impossible de récupérer les visuels Spotify." },
+      { status: 500 },
+    );
   }
 }

@@ -1,36 +1,100 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SpotiFiles
 
-## Getting Started
+Analyse de votre historique d'écoute Spotify : top artistes, top titres, évolution
+mensuelle et toile des collaborations entre artistes.
 
-First, run the development server:
+Deux modes complémentaires :
+
+| Mode | Source | Connexion requise |
+| --- | --- | --- |
+| **Archives** | Fichiers `Streaming_History_Audio_*.json` de l'export Spotify | Non |
+| **En direct** | API Web Spotify (top 50 artistes / titres, albums enregistrés) | Oui (OAuth) |
+
+Les archives sont lues **dans le navigateur** : les écoutes ne sont jamais envoyées
+au serveur. Seuls les noms d'artistes et de titres transitent par l'API interne,
+uniquement pour récupérer les visuels correspondants.
+
+## Stack
+
+Next.js 16 (App Router, Turbopack) · React 19 · TypeScript · Tailwind CSS 4 ·
+shadcn/ui · Recharts · react-force-graph-2d · NextAuth v4.
+
+## Développement
 
 ```bash
+npm install
+cp .env.example .env.local   # puis renseigner les variables
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+L'application est disponible sur http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Variables d'environnement
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable | Obligatoire | Rôle |
+| --- | --- | --- |
+| `SPOTIFY_CLIENT_ID` | oui | Identifiant de l'application Spotify |
+| `SPOTIFY_CLIENT_SECRET` | oui | Secret de l'application Spotify |
+| `NEXTAUTH_SECRET` | oui en production | Signature des JWT de session (`openssl rand -base64 32`) |
+| `NEXTAUTH_URL` | hors Vercel | URL canonique du déploiement |
+| `NEXT_PUBLIC_SITE_URL` | non | URL publique pour les metadata (Open Graph, sitemap) |
 
-## Learn More
+### Application Spotify
 
-To learn more about Next.js, take a look at the following resources:
+Dans le [dashboard développeur Spotify](https://developer.spotify.com/dashboard),
+déclarer les URL de redirection :
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+https://<votre-domaine>/api/auth/callback/spotify
+http://127.0.0.1:3000/api/auth/callback/spotify
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Scopes utilisés : `user-read-email`, `user-top-read`, `user-read-recently-played`,
+`user-library-read`.
 
-## Deploy on Vercel
+> En mode « development », une application Spotify est limitée à 25 utilisateurs
+> déclarés manuellement. Une demande d'extension de quota est nécessaire pour une
+> ouverture publique. Spotify interdit par ailleurs d'utiliser sa marque dans le
+> nom d'une application tierce.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Vérifications avant déploiement
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run verify   # lint + typecheck + build
+```
+
+## Déploiement (Vercel)
+
+1. Importer le dépôt dans Vercel (le framework Next.js est détecté automatiquement).
+2. Renseigner les variables d'environnement ci-dessus dans **Settings → Environment
+   Variables**, pour les environnements *Production* et *Preview*.
+3. Déployer, puis ajouter l'URL de callback du domaine final dans l'application Spotify.
+
+Points déjà configurés pour la production :
+
+- metadata complètes (titre, description, Open Graph, Twitter Card, canonical) ;
+- favicon, icône Apple, icônes PWA et `manifest.webmanifest` ;
+- image Open Graph générée à la compilation (`app/opengraph-image.tsx`) ;
+- `robots.txt` et `sitemap.xml` dynamiques ;
+- en-têtes de sécurité (CSP, HSTS, `X-Frame-Options`, `Permissions-Policy`) ;
+- pages d'erreur et 404 dédiées ;
+- rafraîchissement automatique du token Spotify (valable 1 h) ;
+- limitation de débit et bornes sur la route publique `/api/spotify/images`.
+
+## Structure
+
+```
+app/                 Routes App Router, metadata, pages d'erreur
+  api/auth/          NextAuth (provider Spotify)
+  api/spotify/       Routes serveur : stats en direct, visuels, album aléatoire
+components/dashboard Blocs du tableau de bord
+components/ui        Primitives shadcn/ui
+hooks/               Analyse des archives côté navigateur
+lib/                 Config du site, auth, types, utilitaires
+```
+
+## Personnalisation
+
+Le nom de l'application, la description et les couleurs sont centralisés dans
+[`lib/site.ts`](lib/site.ts) : les modifier met à jour l'onglet du navigateur, le
+manifest PWA, l'image Open Graph, le sitemap et le titre de la page d'accueil.

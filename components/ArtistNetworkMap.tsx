@@ -1,9 +1,12 @@
 "use client";
 
 import React, { useRef, useMemo, useEffect, useState } from "react";
-import ForceGraph2D, { ForceGraphMethods } from "react-force-graph-2d";
+import ForceGraph2D, { type ForceGraphMethods, type NodeObject, type LinkObject } from "react-force-graph-2d";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Network } from "lucide-react";
+
+type GraphNode = NodeObject & { id: string; val: number; x?: number; y?: number };
+type GraphLink = LinkObject & { value: number };
 
 interface ArtistNetworkMapProps {
   data: {
@@ -14,7 +17,7 @@ interface ArtistNetworkMapProps {
 }
 
 export function ArtistNetworkMap({ data, images }: ArtistNetworkMapProps) {
-  const fgRef = useRef<any>(null);
+  const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [initialZoom, setInitialZoom] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -33,8 +36,8 @@ export function ArtistNetworkMap({ data, images }: ArtistNetworkMapProps) {
     return () => window.removeEventListener("resize", updateDimensions);
   }, []);
 
-  // State to trigger re-renders when images load
-  const [imagesLoaded, setImagesLoaded] = useState(0);
+  // Compteur uniquement destiné à re-déclencher un rendu quand une image arrive.
+  const [, setImagesLoaded] = useState(0);
 
   // Pre-load images for canvas drawing
   const nodeImages = useMemo(() => {
@@ -76,18 +79,19 @@ export function ArtistNetworkMap({ data, images }: ArtistNetworkMapProps) {
             nodeLabel="id"
             nodeRelSize={6}
             linkColor={() => "rgba(255, 255, 255, 0.15)"}
-            linkWidth={(link: any) => Math.min(link.value, 5)}
-            nodeCanvasObject={(node: any, ctx, globalScale) => {
-              const size = Math.max(12, (node.val / maxVal) * 40);
-              const img = nodeImages[node.id];
+            linkWidth={(link: LinkObject) => Math.min((link as GraphLink).value, 5)}
+            nodeCanvasObject={(node: NodeObject, ctx, globalScale) => {
+              const { id, val, x = 0, y = 0 } = node as GraphNode;
+              const size = Math.max(12, (val / maxVal) * 40);
+              const img = nodeImages[id];
 
               ctx.save();
               ctx.beginPath();
-              ctx.arc(node.x, node.y, size / 2, 0, 2 * Math.PI, false);
+              ctx.arc(x, y, size / 2, 0, 2 * Math.PI, false);
               ctx.clip();
 
               if (img && img.complete) {
-                ctx.drawImage(img, node.x - size / 2, node.y - size / 2, size, size);
+                ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
               } else {
                 ctx.fillStyle = "#1e1e1e";
                 ctx.fill();
@@ -96,28 +100,27 @@ export function ArtistNetworkMap({ data, images }: ArtistNetworkMapProps) {
                 ctx.fillStyle = "#ffffff";
                 const fontSize = size / 3;
                 ctx.font = `${fontSize}px Sans-Serif`;
-                ctx.fillText(node.id.substring(0, 1), node.x, node.y);
+                ctx.fillText(id.substring(0, 1), x, y);
               }
               
               ctx.restore();
 
               // Draw ring
               ctx.beginPath();
-              ctx.arc(node.x, node.y, size / 2, 0, 2 * Math.PI, false);
+              ctx.arc(x, y, size / 2, 0, 2 * Math.PI, false);
               ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
               ctx.lineWidth = 1.5 / globalScale;
               ctx.stroke();
 
               // Text label
-              const label = node.id;
+              const label = id;
               const fontSize = 12 / globalScale;
               ctx.font = `300 ${fontSize}px Inter, Sans-Serif`;
               ctx.textAlign = "center";
               ctx.textBaseline = "top";
               ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-              ctx.fillText(label, node.x, node.y + size / 2 + 4 / globalScale);
+              ctx.fillText(label, x, y + size / 2 + 4 / globalScale);
             }}
-            // @ts-ignore
             d3VelocityDecay={0.3}
             cooldownTicks={100}
             onEngineStop={() => {

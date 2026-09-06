@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useRef, useState, useMemo, useEffect } from "react";
+import React, { useRef, useState, useMemo, useEffect, useCallback } from "react";
 import anime from "animejs";
-import { UploadCloud, Clock, Music, Users, FileJson, Loader2, Calendar, Database, Mail, Download, History, LogOut, Shuffle, Disc3 } from "lucide-react";
+import { UploadCloud, Clock, Loader2, Calendar, LogOut, AlertTriangle } from "lucide-react";
 import { useSpotifyData } from "@/hooks/useSpotifyData";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import dynamic from 'next/dynamic';
@@ -30,10 +29,31 @@ import {
 } from "@/components/ui/chart";
 import { Bar, BarChart, Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
+import { siteConfig } from "@/lib/site";
+import type { DashboardStats, ImageMaps, TrackStats } from "@/lib/stats";
+import type { SpotifyArtist, SpotifyTrack } from "@/lib/spotify";
 
-const CustomYAxisTick = ({ x, y, payload, data, images, isTrack }: any) => {
+interface ChartTickDatum {
+  name: string;
+  fullName?: string;
+  uri?: string | null;
+  artist?: string;
+}
+
+interface CustomYAxisTickProps {
+  // Recharts passe des coordonnées qui peuvent être typées string | number.
+  x?: number | string;
+  y?: number | string;
+  payload?: { index: number; value: string };
+  data: ChartTickDatum[];
+  images: ImageMaps;
+  isTrack: boolean;
+}
+
+const CustomYAxisTick = ({ x, y, payload, data, images, isTrack }: CustomYAxisTickProps) => {
+  if (!payload) return null;
   const item = data[payload.index];
-  let imageUrl = null;
+  let imageUrl: string | undefined;
   if (item) {
     if (isTrack) {
       imageUrl = images.tracks[item.uri || `${item.name}-${item.artist}`];
@@ -67,30 +87,49 @@ export default function SpotifyDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const { data: session } = useSession();
-  const [liveStats, setLiveStats] = useState<any>(null);
-  const [liveImages, setLiveImages] = useState<{ artists: Record<string, string>; tracks: Record<string, string> }>({ artists: {}, tracks: {} });
+  const [liveStats, setLiveStats] = useState<DashboardStats | null>(null);
+  const [liveImages, setLiveImages] = useState<ImageMaps>({ artists: {}, tracks: {} });
   const [isLiveLoading, setIsLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
   const [liveTimeRange, setLiveTimeRange] = useState("medium_term");
-  
-  const stats = archiveStats || liveStats;
-  const images = {
+  const hasAutoFetchedRef = useRef(false);
+
+  /** La session Spotify a expiré et n'a pas pu être rafraîchie. */
+  const sessionExpired = session?.error === "RefreshAccessTokenError";
+
+  const stats: DashboardStats | null = archiveStats || liveStats;
+  const images: ImageMaps = useMemo(() => ({
     artists: { ...archiveImages.artists, ...liveImages.artists },
     tracks: { ...archiveImages.tracks, ...liveImages.tracks }
-  };
+  }), [archiveImages, liveImages]);
 
-  const fetchLiveStats = async (timeRange: string) => {
+  const fetchLiveStats = useCallback(async (timeRange: string) => {
     setIsLiveLoading(true);
+    setLiveError(null);
     try {
       const res = await fetch(`/api/spotify/live?time_range=${timeRange}`);
-      if (res.ok) {
-        const data = await res.json();
-        const newLiveImages = { artists: {} as Record<string, string>, tracks: {} as Record<string, string> };
-        const nodes: any[] = [];
-        const links: any[] = [];
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        setLiveError(
+          payload?.error ?? "Impossible de récupérer vos statistiques Spotify pour le moment."
+        );
+        return;
+      }
+
+      {
+        const data: {
+          artists: SpotifyArtist[];
+          tracks: SpotifyTrack[];
+          networkTracks?: SpotifyTrack[];
+        } = await res.json();
+        const newLiveImages: ImageMaps = { artists: {}, tracks: {} };
+        const nodes: { id: string; val: number }[] = [];
+        const links: { source: string; target: string; value: number }[] = [];
         
         const artistSet = new Set<string>();
         
-        const topArtists = data.artists.map((a: any, i: number) => {
+        const topArtists = data.artists.map((a, i) => {
           if (a.images?.[0]?.url) newLiveImages.artists[a.name] = a.images[0].url;
           nodes.push({ id: a.name, val: Math.max(20, a.popularity || 20) });
           artistSet.add(a.name);
@@ -105,7 +144,7 @@ export default function SpotifyDashboard() {
           
           return { name: a.name, msPlayed: Math.round(100 * Math.pow(0.92, i)) };
         });
-        const topTracks = data.tracks.map((t: any, i: number) => {
+        const topTracks: TrackStats[] = data.tracks.map((t, i) => {
           const artistName = t.artists[0].name;
           const key = t.uri || `${t.name}-${artistName}`;
           if (t.album?.images?.[0]?.url) newLiveImages.tracks[key] = t.album.images[0].url;
@@ -114,7 +153,7 @@ export default function SpotifyDashboard() {
 
         // Add featurings to network map from extensive track history
         if (data.networkTracks) {
-          data.networkTracks.forEach((t: any) => {
+          data.networkTracks.forEach((t) => {
             if (t.artists && t.artists.length > 1) {
               for (let x = 0; x < t.artists.length; x++) {
                 for (let y = x + 1; y < t.artists.length; y++) {
@@ -151,16 +190,22 @@ export default function SpotifyDashboard() {
       }
     } catch (e) {
       console.error(e);
+      setLiveError("Connexion à Spotify impossible. Vérifiez votre réseau puis réessayez.");
     } finally {
       setIsLiveLoading(false);
     }
-  };
+  }, []);
 
+  // Chargement initial des stats « en direct » au retour de l'authentification
+  // Spotify : la session arrive de façon asynchrone, il n'y a pas d'événement
+  // utilisateur sur lequel s'accrocher. Le ref garantit un seul déclenchement.
   useEffect(() => {
-    if ((session as any)?.accessToken && !archiveStats && !liveStats && !isLiveLoading) {
-      fetchLiveStats(liveTimeRange);
+    if (!session?.accessToken || sessionExpired || archiveStats || hasAutoFetchedRef.current) {
+      return;
     }
-  }, [session, archiveStats, liveStats, isLiveLoading, liveTimeRange]);
+    hasAutoFetchedRef.current = true;
+    fetchLiveStats(liveTimeRange);
+  }, [session, sessionExpired, archiveStats, liveTimeRange, fetchLiveStats]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -188,12 +233,12 @@ export default function SpotifyDashboard() {
     }
   };
 
-  const formatHours = (ms: number) => {
-    return (ms / (1000 * 60 * 60)).toFixed(1);
-  };
+  const hasStats = !!stats;
+  const topArtistsList = stats?.topArtists;
+  const topTracksList = stats?.topTracks;
 
   useEffect(() => {
-    if (stats && !isProcessing) {
+    if (hasStats && !isProcessing) {
       anime({
         targets: '.kpi-card',
         translateY: [20, 0],
@@ -212,10 +257,10 @@ export default function SpotifyDashboard() {
         duration: 800
       });
     }
-  }, [!!stats, isProcessing]);
+  }, [hasStats, isProcessing]);
 
   useEffect(() => {
-    if (stats && !isProcessing) {
+    if (hasStats && !isProcessing) {
       anime({
         targets: '.list-item-anim',
         translateX: [-10, 0],
@@ -225,7 +270,7 @@ export default function SpotifyDashboard() {
         duration: 500
       });
     }
-  }, [stats?.topArtists, stats?.topTracks, isProcessing]);
+  }, [hasStats, topArtistsList, topTracksList, isProcessing]);
 
   // Configurations dynamiques pour les graphiques
   const monthChartConfig = useMemo(() => {
@@ -246,7 +291,7 @@ export default function SpotifyDashboard() {
     // Palette distincte pour les lignes de l'évolution des musiques
     const colors = ["#10b981", "#8b5cf6", "#0ea5e9", "#f43f5e", "#f59e0b"];
     if (stats?.topTracks) {
-      stats.topTracks.slice(0, 5).forEach((t: any, i: number) => {
+      stats.topTracks.slice(0, 5).forEach((t, i) => {
         config[`track_${i}`] = {
           label: t.name,
           color: colors[i % colors.length],
@@ -272,7 +317,7 @@ export default function SpotifyDashboard() {
 
   const top10ArtistsChartData = useMemo(() => {
     if (!stats) return [];
-    return stats.topArtists.slice(0, 10).map((a: any) => ({
+    return stats.topArtists.slice(0, 10).map((a) => ({
       name: a.name.length > 15 ? a.name.substring(0, 15) + "..." : a.name,
       fullName: a.name,
       msPlayed: stats.isLive ? a.msPlayed : Number((a.msPlayed / (1000 * 60 * 60)).toFixed(2))
@@ -281,7 +326,7 @@ export default function SpotifyDashboard() {
 
   const top10TracksChartData = useMemo(() => {
     if (!stats) return [];
-    return stats.topTracks.slice(0, 10).map((t: any) => ({
+    return stats.topTracks.slice(0, 10).map((t) => ({
       name: t.name.length > 15 ? t.name.substring(0, 15) + "..." : t.name,
       fullName: `${t.name} - ${t.artist}`,
       playCount: t.playCount,
@@ -368,10 +413,11 @@ export default function SpotifyDashboard() {
           <div className="space-y-3">
             <h1 className="text-5xl font-light tracking-tighter text-white lg:text-6xl flex items-center gap-4">
               <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              Statistiques Spotify
+              {siteConfig.name}
             </h1>
             <p className="text-lg font-light text-neutral-500 max-w-2xl">
-              Analyse détaillée et minimaliste de votre historique d'écoute {liveStats ? "en direct." : "étendu."}
+              Analyse détaillée et minimaliste de votre historique d&apos;écoute{" "}
+              {liveStats ? "en direct." : "étendu."}
             </p>
           </div>
           
@@ -462,9 +508,25 @@ export default function SpotifyDashboard() {
           )}
         </header>
 
-        {error && (
-          <div className="p-6 border border-red-500/20 rounded-2xl bg-red-500/5 text-red-200 font-light text-sm">
-            {error}
+        {sessionExpired && (
+          <div className="flex flex-col items-start gap-4 p-6 text-sm font-light border rounded-2xl border-amber-500/20 bg-amber-500/5 text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+            <span className="flex items-center gap-3">
+              <AlertTriangle className="w-4 h-4 shrink-0 stroke-[1.5]" />
+              Votre session Spotify a expiré. Reconnectez-vous pour actualiser vos statistiques.
+            </span>
+            <Button
+              onClick={() => signIn("spotify")}
+              className="rounded-full bg-[#1DB954] px-6 font-light text-black hover:bg-[#1ed760]"
+            >
+              Se reconnecter
+            </Button>
+          </div>
+        )}
+
+        {(error || liveError) && (
+          <div className="flex items-center gap-3 p-6 text-sm font-light border border-red-500/20 rounded-2xl bg-red-500/5 text-red-200">
+            <AlertTriangle className="w-4 h-4 shrink-0 stroke-[1.5]" />
+            {error || liveError}
           </div>
         )}
 
@@ -558,7 +620,7 @@ export default function SpotifyDashboard() {
                         <YAxis tickLine={false} axisLine={false} tickMargin={12} stroke="#737373" fontSize={12} />
                         <ChartTooltip content={<ChartTooltipContent />} cursor={{stroke: '#ffffff15', strokeWidth: 2}} />
                         <ChartLegend content={<ChartLegendContent />} />
-                        {stats.topTracks.slice(0, 5).map((t: any, i: number) => {
+                        {stats.topTracks.slice(0, 5).map((_, i) => {
                           const safeKey = `track_${i}`;
                           return (
                             <Line

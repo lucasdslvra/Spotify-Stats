@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import type { DashboardStats, ImageMaps, MonthlyStats } from "@/lib/stats";
 
 export interface SpotifyPlayHistory {
   ts: string;
@@ -24,49 +25,27 @@ export interface SpotifyPlayHistory {
   incognito_mode: boolean;
 }
 
-export interface ArtistStats {
-  name: string;
-  msPlayed: number;
-}
-
-export interface TrackStats {
-  name: string;
-  artist: string;
-  playCount: number;
-  uri: string | null;
-}
-
-export interface MonthlyStats {
-  month: string;
-  [key: string]: number | string;
-}
-
-export interface SpotifyStats {
-  totalMsPlayed: number;
-  uniqueArtists: number;
-  uniqueTracks: number;
-  topArtists: ArtistStats[];
-  topTracks: TrackStats[];
-  monthlyStats: MonthlyStats[];
-  monthlyTopTracksStats: any[];
-  totalFiles: number;
-  networkData: {
-    nodes: { id: string; val: number }[];
-    links: { source: string; target: string; value: number }[];
-  };
-}
+export type {
+  ArtistStats,
+  TrackStats,
+  MonthlyStats,
+  NetworkData,
+  DashboardStats,
+  ImageMaps,
+} from "@/lib/stats";
 
 const MONTH_NAMES = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
 
 export const useSpotifyData = () => {
   const [rawEntries, setRawEntries] = useState<SpotifyPlayHistory[]>([]);
   const [totalFiles, setTotalFiles] = useState(0);
-  const [selectedYears, setSelectedYears] = useState<number[]>([]);
+  // `null` = aucune sélection explicite : toutes les années disponibles sont retenues.
+  const [yearSelection, setYearSelection] = useState<number[] | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Cache pour stocker les images récupérées
-  const [images, setImages] = useState<{ artists: Record<string, string>; tracks: Record<string, string> }>({ artists: {}, tracks: {} });
+  const [images, setImages] = useState<ImageMaps>({ artists: {}, tracks: {} });
   const [genres, setGenres] = useState<Record<string, string[]>>({});
   const requestedImages = useRef<Set<string>>(new Set());
 
@@ -82,7 +61,7 @@ export const useSpotifyData = () => {
             try {
               const json = JSON.parse(e.target?.result as string);
               resolve(json);
-            } catch (err) {
+            } catch {
               reject(new Error(`Échec de l'analyse du fichier JSON: ${file.name}`));
             }
           };
@@ -96,8 +75,8 @@ export const useSpotifyData = () => {
       
       setRawEntries(allEntries);
       setTotalFiles(files.length);
-    } catch (err: any) {
-      setError(err.message || "Une erreur inattendue s'est produite.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Une erreur inattendue s'est produite.");
     } finally {
       setIsProcessing(false);
     }
@@ -115,10 +94,11 @@ export const useSpotifyData = () => {
     return Array.from(years).sort((a, b) => b - a);
   }, [rawEntries]);
 
-  // Initialiser les années sélectionnées avec toutes les années disponibles au chargement
-  useEffect(() => {
-    setSelectedYears(availableYears);
-  }, [availableYears]);
+  // Sélection dérivée : évite un setState dans un effet (rendus en cascade).
+  const selectedYears = useMemo(
+    () => yearSelection ?? availableYears,
+    [yearSelection, availableYears],
+  );
 
   const yearlyData = useMemo(() => {
     const map = new Map<number, {
@@ -173,7 +153,7 @@ export const useSpotifyData = () => {
     return map;
   }, [rawEntries]);
 
-  const stats = useMemo(() => {
+  const stats = useMemo<DashboardStats | null>(() => {
     if (!rawEntries.length) return null;
 
     let totalMsPlayed = 0;
@@ -246,7 +226,7 @@ export const useSpotifyData = () => {
 
     const top5Tracks = topTracks.slice(0, 5);
     const monthlyTopTracksStats = MONTH_NAMES.map((month, index) => {
-      const data: any = { month };
+      const data: MonthlyStats = { month };
       top5Tracks.forEach((t, i) => {
         const trackKey = `${t.name}::${t.artist}`;
         data[`track_${i}`] = monthTrackCountMap[index][trackKey] || 0;
@@ -352,7 +332,7 @@ export const useSpotifyData = () => {
       totalFiles,
       networkData: { nodes, links }
     };
-  }, [yearlyData, selectedYears, totalFiles, availableYears, genres]);
+  }, [rawEntries.length, yearlyData, selectedYears, totalFiles, availableYears, genres]);
 
   // Effect pour récupérer les images des Top Artistes et Top Titres
   useEffect(() => {
@@ -405,19 +385,20 @@ export const useSpotifyData = () => {
   }, [stats]);
 
   const toggleYear = (year: number) => {
-    setSelectedYears(prev => 
-      prev.includes(year) 
-        ? prev.filter(y => y !== year)
-        : [...prev, year].sort((a, b) => b - a)
-    );
+    setYearSelection(prev => {
+      const current = prev ?? availableYears;
+      return current.includes(year)
+        ? current.filter(y => y !== year)
+        : [...current, year].sort((a, b) => b - a);
+    });
   };
 
   const selectAllYears = () => {
-    setSelectedYears(availableYears);
+    setYearSelection(null);
   };
 
   const clearAllYears = () => {
-    setSelectedYears([]);
+    setYearSelection([]);
   };
 
   return { 

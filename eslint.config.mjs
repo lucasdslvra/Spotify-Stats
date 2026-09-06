@@ -13,6 +13,15 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Les pochettes et photos d'artistes viennent des CDN Spotify et sont
+      // affichées par centaines : les passer dans next/image ferait exploser
+      // le quota d'optimisation d'images sans gain réel (formats déjà optimisés,
+      // tailles fixes et connues). Le <img> natif est ici un choix assumé.
+      "@next/next/no-img-element": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

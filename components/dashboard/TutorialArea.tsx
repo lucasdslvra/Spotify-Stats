@@ -12,7 +12,7 @@ export function TutorialArea() {
           </div>
           <h3 className="text-white font-medium mb-2">1. Demander</h3>
           <p className="text-sm text-neutral-500 font-light leading-relaxed">
-            Allez dans les <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noreferrer" className="text-neutral-300 hover:text-white underline underline-offset-4 decoration-white/20">paramètres de confidentialité</a> de votre compte Spotify et demandez l'historique de streaming étendu ("Extended streaming history").
+            Allez dans les <a href="https://www.spotify.com/account/privacy/" target="_blank" rel="noreferrer" className="text-neutral-300 hover:text-white underline underline-offset-4 decoration-white/20">paramètres de confidentialité</a> de votre compte Spotify et demandez l&apos;historique de streaming étendu (&laquo;&nbsp;Extended streaming history&nbsp;&raquo;).
           </p>
         </div>
         
@@ -22,7 +22,7 @@ export function TutorialArea() {
           </div>
           <h3 className="text-white font-medium mb-2">2. Patienter</h3>
           <p className="text-sm text-neutral-500 font-light leading-relaxed">
-            Spotify a besoin de temps pour rassembler toutes vos données. Cela prend généralement quelques jours (jusqu'à 30 jours au maximum).
+            Spotify a besoin de temps pour rassembler toutes vos données. Cela prend généralement quelques jours (jusqu&apos;à 30 jours au maximum).
           </p>
         </div>
 
@@ -32,7 +32,7 @@ export function TutorialArea() {
           </div>
           <h3 className="text-white font-medium mb-2">3. Extraire</h3>
           <p className="text-sm text-neutral-500 font-light leading-relaxed">
-            Vous recevrez un e-mail avec un lien une fois l'archive prête. Téléchargez le dossier <span className="font-mono text-neutral-400">.zip</span> et extrayez-le sur votre ordinateur.
+            Vous recevrez un e-mail avec un lien une fois l&apos;archive prête. Téléchargez le dossier <span className="font-mono text-neutral-400">.zip</span> et extrayez-le sur votre ordinateur.
           </p>
         </div>
 

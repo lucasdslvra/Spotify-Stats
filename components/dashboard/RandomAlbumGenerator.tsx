@@ -1,32 +1,32 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { Shuffle, Disc3, Loader2, X } from "lucide-react";
+import { Shuffle, Disc3, Loader2, X, AlertTriangle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import type { SpotifyAlbum } from "@/lib/spotify";
 
 export function RandomAlbumGenerator() {
-  const [randomAlbum, setRandomAlbum] = useState<any>(null);
+  const [randomAlbum, setRandomAlbum] = useState<SpotifyAlbum | null>(null);
   const [isRandomAlbumLoading, setIsRandomAlbumLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchRandomAlbum = async () => {
     setIsRandomAlbumLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/spotify/random-album");
-      if (res.ok) {
-        const data = await res.json();
-        setRandomAlbum(data.album);
-        setShowModal(true);
-      } else {
-        console.error("Erreur lors de la récupération de l'album aléatoire");
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        setError(payload?.error ?? "Impossible de tirer un album au sort.");
+        return;
       }
+      const data = await res.json();
+      setRandomAlbum(data.album);
+      setShowModal(true);
     } catch (e) {
       console.error(e);
+      setError("Connexion impossible. Vérifiez votre réseau puis réessayez.");
     } finally {
       setIsRandomAlbumLoading(false);
     }
@@ -40,7 +40,7 @@ export function RandomAlbumGenerator() {
         <div>
           <CardTitle className="text-xl font-light text-white flex items-center gap-2">
             <Shuffle className="w-5 h-5 text-emerald-400" />
-            Générateur d'Album Aléatoire
+            Générateur d&apos;Album Aléatoire
           </CardTitle>
           <CardDescription className="text-neutral-500 font-light">
             Vous ne savez pas quoi écouter ? Piochez un album au hasard dans votre bibliothèque.
@@ -55,9 +55,17 @@ export function RandomAlbumGenerator() {
           Piocher un album
         </Button>
       </CardHeader>
+      {error && (
+        <CardContent className="px-8 pb-6 pt-0">
+          <p className="flex items-center gap-2 text-sm font-light text-red-300">
+            <AlertTriangle className="w-4 h-4 shrink-0 stroke-[1.5]" />
+            {error}
+          </p>
+        </CardContent>
+      )}
       </Card>
 
-      {mounted && showModal && randomAlbum && createPortal(
+      {showModal && randomAlbum && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
           <div className="relative w-full max-w-md overflow-hidden bg-[#0a0a0a] border border-white/10 rounded-3xl shadow-2xl animate-in zoom-in-95 duration-300">
             <button 
@@ -77,7 +85,7 @@ export function RandomAlbumGenerator() {
               <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/60 to-transparent" />
               <div className="absolute bottom-0 left-0 right-0 p-8 flex flex-col items-center text-center">
                 <h3 className="text-3xl font-bold text-white tracking-tight mb-2 line-clamp-2 leading-tight">{randomAlbum.name}</h3>
-                <p className="text-xl font-light text-neutral-300 mb-2">{randomAlbum.artists?.map((a: any) => a.name).join(", ")}</p>
+                <p className="text-xl font-light text-neutral-300 mb-2">{randomAlbum.artists?.map((a) => a.name).join(", ")}</p>
                 <div className="flex items-center gap-3 mb-8 text-sm text-neutral-400 font-light">
                   <span>{randomAlbum.release_date?.substring(0, 4)}</span>
                   <span>•</span>
@@ -90,7 +98,7 @@ export function RandomAlbumGenerator() {
                   className="px-8 py-3 bg-[#1DB954] hover:bg-[#1ed760] text-black font-medium rounded-full transition-all duration-300 shadow-[0_0_20px_-5px_rgba(29,185,84,0.5)] hover:shadow-[0_0_30px_-5px_rgba(29,185,84,0.8)] hover:-translate-y-1 flex items-center gap-2"
                 >
                   <Disc3 className="w-5 h-5" />
-                  Écouter l'album
+                  Écouter l&apos;album
                 </a>
               </div>
             </div>

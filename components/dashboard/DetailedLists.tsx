@@ -1,13 +1,11 @@
 import React from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { DashboardStats, ImageMaps } from "@/lib/stats";
 
 interface DetailedListsProps {
-  stats: any;
-  images: {
-    artists: Record<string, string>;
-    tracks: Record<string, string>;
-  };
+  stats: DashboardStats;
+  images: ImageMaps;
 }
 
 export function DetailedLists({ stats, images }: DetailedListsProps) {
@@ -25,7 +23,7 @@ export function DetailedLists({ stats, images }: DetailedListsProps) {
           <ScrollArea className="h-[400px]">
             <ul className="divide-y divide-white/[0.05]">
               {stats.topArtists.length > 0 ? (
-                stats.topArtists.map((artist: any, index: number) => (
+                stats.topArtists.map((artist, index) => (
                   <li key={artist.name} className="list-item-anim opacity-0 flex items-center justify-between p-5 transition-colors hover:bg-white/[0.02] group">
                     <div className="flex items-center space-x-5">
                       <div className="relative">
@@ -67,7 +65,7 @@ export function DetailedLists({ stats, images }: DetailedListsProps) {
           <ScrollArea className="h-[400px]">
             <ul className="divide-y divide-white/[0.05]">
               {stats.topTracks.length > 0 ? (
-                stats.topTracks.map((track: any, index: number) => (
+                stats.topTracks.map((track, index) => (
                   <li key={`${track.name}-${track.artist}`} className="list-item-anim opacity-0 flex items-center justify-between p-5 transition-colors hover:bg-white/[0.02] group">
                     <div className="flex items-center space-x-5">
                       <div className="relative">
